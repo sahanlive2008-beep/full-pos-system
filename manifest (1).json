@@ -1,0 +1,12 @@
+{
+  "background_color": "#000000",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "PIYARATHNA STORES",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "piyrtna stores",
+  "start_url": "/sahan",
+  "theme_color": "#ffffff",
+  "description": "Pos system"
+}
