@@ -11,9 +11,10 @@
     <style>
         <link rel="manifest" href="manifest.json">
         @media print {
-            body * { visibility: hidden; }
-            #print-area, #print-area * { visibility: visible; }
-            #print-area { position: absolute; left: 0; top: 0; width: 58mm; padding: 0; margin: 0; border: none; }
+            /* Hides everything except the temporary print wrapper during printing */
+            body > *:not(#temp-print-wrap) { display: none !important; }
+            #temp-print-wrap { display: block !important; width: 58mm; margin: 0; padding: 0; }
+            #temp-print-wrap img { width: 100%; height: auto; display: block; }
         }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
@@ -54,9 +55,14 @@
             padding: 6px;
             margin: 8px 0;
         }
+
+        /* Temporary wrapper for printing the image */
+        #temp-print-wrap { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 pb-24">
+
+    <div id="temp-print-wrap"></div>
 
     <div id="png-modal">
         <div class="modal-content">
@@ -304,6 +310,7 @@
             }, 100);
         }
 
+        // IMPROVED PRINTING: Uses same-page printing to bypass mobile popup blockers
         async function finalPrintProcess() {
             const previewSlot = document.getElementById('png-preview-slot');
             const imgElement = previewSlot.querySelector('img');
@@ -334,23 +341,21 @@
                 }
             }
 
-            // TRIGGER SYSTEM PRINT WITH IMAGE TO AVOID KANJI ERROR
-            const pWin = window.open('', '_blank');
-            pWin.document.write(`
-                <html>
-                    <body style="margin:0; padding:0; display:flex; justify-content:center;">
-                        <img src="${imgElement.src}" style="width:58mm;" onload="window.print();window.close();">
-                    </body>
-                </html>
-            `);
-            pWin.document.close();
-
-            // Clear Cart
-            cart = []; 
-            await db.draftCart.clear(); 
-            renderCart(); 
-            updateLivePreview();
-            closePngModal();
+            // STABLE PRINTING LOGIC FOR MOBILE:
+            const printWrap = document.getElementById('temp-print-wrap');
+            printWrap.innerHTML = `<img src="${imgElement.src}">`;
+            
+            // Short delay to ensure image is rendered
+            setTimeout(() => {
+                window.print();
+                // Clear Cart and close modal after printing starts
+                cart = []; 
+                db.draftCart.clear(); 
+                renderCart(); 
+                updateLivePreview();
+                closePngModal();
+                printWrap.innerHTML = '';
+            }, 250);
         }
 
         function closePngModal() { document.getElementById('png-modal').style.display = 'none'; }
