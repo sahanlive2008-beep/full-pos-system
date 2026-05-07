@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="si">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -257,6 +257,7 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
+        // --- Bluetooth & Logo Logic ---
         async function connectAndSaveBluetooth() {
             const status = document.getElementById('printer-status');
             try {
@@ -279,15 +280,19 @@
             alert("Saved printer forgotten.");
         }
 
+        // --- FIX: PRINTING PNG LOGIC (TO PREVENT KANJI) ---
         async function generatePngInstead() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
             if(cart.length === 0) return alert("Cart is empty");
+            
             updateLivePreview(); 
             const printArea = document.getElementById('print-area');
             const previewSlot = document.getElementById('png-preview-slot');
+            
             previewSlot.innerHTML = "<p class='animate-pulse'>Generating PNG Image...</p>";
             document.getElementById('png-modal').style.display = 'flex';
+            
             setTimeout(() => {
                 html2canvas(printArea, { scale: 3, backgroundColor: "#ffffff", logging: false }).then(canvas => {
                     const img = new Image();
@@ -299,17 +304,16 @@
             }, 100);
         }
 
-        function closePngModal() { document.getElementById('png-modal').style.display = 'none'; }
-
         async function finalPrintProcess() {
             const previewSlot = document.getElementById('png-preview-slot');
             const imgElement = previewSlot.querySelector('img');
+            
             if (!imgElement) {
-                alert("Please wait for the image to generate.");
+                alert("Image not ready. Please wait.");
                 return;
             }
 
-            // Logic to save sale data
+            // Save Transaction to Database
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
             const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
             const custName = document.getElementById('bill-customer').value;
@@ -330,11 +334,18 @@
                 }
             }
 
-            // FIX: Print PNG directly to a new window to prevent Kanji error
+            // TRIGGER SYSTEM PRINT WITH IMAGE TO AVOID KANJI ERROR
             const pWin = window.open('', '_blank');
-            pWin.document.write(`<html><body style="margin:0;"><img src="${imgElement.src}" style="width:58mm;" onload="window.print();window.close();"></body></html>`);
+            pWin.document.write(`
+                <html>
+                    <body style="margin:0; padding:0; display:flex; justify-content:center;">
+                        <img src="${imgElement.src}" style="width:58mm;" onload="window.print();window.close();">
+                    </body>
+                </html>
+            `);
             pWin.document.close();
 
+            // Clear Cart
             cart = []; 
             await db.draftCart.clear(); 
             renderCart(); 
@@ -342,28 +353,9 @@
             closePngModal();
         }
 
-        function handleLogoUpload(input) {
-            const file = input.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const base64 = e.target.result;
-                    localStorage.setItem('bill_logo', base64);
-                    loadLogo();
-                };
-                reader.readAsDataURL(file);
-            }
-        }
+        function closePngModal() { document.getElementById('png-modal').style.display = 'none'; }
 
-        function loadLogo() {
-            const logoBase64 = localStorage.getItem('bill_logo');
-            const imgElement = document.getElementById('receipt-logo');
-            if (logoBase64) { imgElement.src = logoBase64; imgElement.style.display = 'block'; } 
-            else { imgElement.style.display = 'none'; }
-        }
-
-        function removeLogo() { localStorage.removeItem('bill_logo'); loadLogo(); }
-
+        // --- SEARCH & CART LOGIC ---
         async function searchItems(query) {
             const resultsDiv = document.getElementById('search-results');
             let items;
@@ -394,17 +386,122 @@
             document.getElementById('search-results').style.display = 'none';
         }
 
+        async function addToCart() {
+            const code = document.getElementById('bill-code').value;
+            const qty = parseFloat(document.getElementById('bill-qty').value);
+            const discount = parseFloat(document.getElementById('bill-discount').value) || 0;
+            const item = await db.inventory.get(code);
+            
+            if(item) {
+                if(item.stock - qty < 10) { alert(`⚠️ Low Stock: ${item.name} is under 10!`); }
+                const cartItem = {
+                    ...item, 
+                    qty: qty, 
+                    discount: discount,
+                    total: (item.price * qty) - discount
+                };
+                cart.push(cartItem);
+                await db.draftCart.add(cartItem);
+                renderCart();
+                document.getElementById('bill-code').value = '';
+                document.getElementById('bill-name').value = '';
+                document.getElementById('bill-qty').value = '1';
+                document.getElementById('bill-discount').value = '0';
+                updateLivePreview();
+            }
+        }
+
+        async function removeFromCart(index) {
+            const itemToRemove = cart[index];
+            if(itemToRemove.id) { await db.draftCart.delete(itemToRemove.id); }
+            cart.splice(index, 1); renderCart(); updateLivePreview();
+        }
+
+        async function addUnlistedItem() {
+            const name = prompt("Item Name:");
+            const price = parseFloat(prompt("Price (LKR):"));
+            if(name && !isNaN(price)) {
+                const cartItem = { name, price, qty: 1, wholesale: price, total: price, discount: 0 };
+                cart.push(cartItem); await db.draftCart.add(cartItem);
+                renderCart(); updateLivePreview();
+            }
+        }
+
+        function renderCart() {
+            let total = cart.reduce((sum, i) => sum + i.total, 0);
+            document.getElementById('cart-items').innerHTML = cart.map((i, index) => `
+                <div class="flex justify-between border-b py-1">
+                    <span>${i.name} x ${i.qty} ${i.discount > 0 ? '<small class="text-blue-600">(-'+i.discount+')</small>' : ''}</span>
+                    <div class="flex gap-2">
+                        <span>${i.total.toFixed(2)}</span>
+                        <button onclick="removeFromCart(${index})" class="text-red-500 font-bold">X</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('cart-total').innerText = total.toFixed(2);
+        }
+
+        function updateLivePreview() {
+            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
+            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            const totalDiscount = cart.reduce((sum, i) => sum + i.discount, 0);
+            
+            document.getElementById('print-items').innerHTML = cart.map(i => {
+                const unitPriceAfterDiscount = i.total / i.qty;
+                return `
+                <div style="margin-bottom: 5px;">
+                    <div class="flex justify-between">
+                        <span style="width:15%">${i.qty}</span>
+                        <span style="width:25%">${i.price.toFixed(2)}</span>
+                        <span style="width:25%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
+                        <span style="width:35%; text-align:right">${i.total.toFixed(2)}</span>
+                    </div>
+                    <div style="font-weight:bold">${i.name}</div>
+                </div>
+            `}).join('');
+
+            let totalHtml = `<p>මුළු මුදල: LKR ${subtotal.toFixed(2)}</p>`;
+            if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
+                totalHtml += `<p class="font-bold">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
+            }
+            totalHtml += `<p>Payment: ${paymentMode.toUpperCase()}</p>`;
+            document.getElementById('print-totals').innerHTML = totalHtml;
+        }
+
+        // --- OTHER UTILITIES (UNCHANGED) ---
+        function setPaymentMode(mode) {
+            paymentMode = mode;
+            document.getElementById('btn-cash').className = mode === 'cash' ? 'flex-1 rounded bg-green-700 text-white text-xs font-bold' : 'flex-1 rounded bg-gray-200 text-xs font-bold';
+            document.getElementById('btn-credit').className = mode === 'credit' ? 'flex-1 rounded bg-red-700 text-white text-xs font-bold' : 'flex-1 rounded bg-gray-200 text-xs font-bold';
+            updateLivePreview();
+        }
+
+        function handleLogoUpload(input) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const base64 = e.target.result;
+                    localStorage.setItem('bill_logo', base64);
+                    loadLogo();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function loadLogo() {
+            const logoBase64 = localStorage.getItem('bill_logo');
+            const imgElement = document.getElementById('receipt-logo');
+            if (logoBase64) { imgElement.src = logoBase64; imgElement.style.display = 'block'; } 
+            else { imgElement.style.display = 'none'; }
+        }
+
+        function removeLogo() { localStorage.removeItem('bill_logo'); loadLogo(); }
+
         function toggleSidebar() {
             const sb = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebar-overlay');
             sb.classList.toggle('open'); overlay.classList.toggle('hidden');
-        }
-
-        async function testPrint() {
-            if (!bleCharacteristic) return alert("Connect printer first!");
-            const encoder = new TextEncoder();
-            const data = encoder.encode("Piyaratne Stores\nConnection Test\n\n\n");
-            await bleCharacteristic.writeValue(data);
         }
 
         function showTab(id) {
@@ -447,95 +544,6 @@
 
         async function updateStock(code, val) { await db.inventory.update(code, {stock: parseFloat(val)}); }
         async function updatePrice(code, val) { await db.inventory.update(code, {price: parseFloat(val)}); }
-
-        async function addToCart() {
-            const code = document.getElementById('bill-code').value;
-            const qty = parseFloat(document.getElementById('bill-qty').value);
-            const discount = parseFloat(document.getElementById('bill-discount').value) || 0;
-            const item = await db.inventory.get(code);
-            
-            if(item) {
-                if(item.stock - qty < 10) { alert(`⚠️ Low Stock: ${item.name} is under 10!`); }
-                const cartItem = {
-                    ...item, 
-                    qty: qty, 
-                    discount: discount,
-                    total: (item.price * qty) - discount
-                };
-                cart.push(cartItem);
-                await db.draftCart.add(cartItem);
-                renderCart();
-                document.getElementById('bill-code').value = '';
-                document.getElementById('bill-name').value = '';
-                document.getElementById('bill-qty').value = '1';
-                document.getElementById('bill-discount').value = '0';
-                updateLivePreview();
-            }
-        }
-
-        async function addUnlistedItem() {
-            const name = prompt("Item Name:");
-            const price = parseFloat(prompt("Price (LKR):"));
-            if(name && !isNaN(price)) {
-                const cartItem = { name, price, qty: 1, wholesale: price, total: price, discount: 0 };
-                cart.push(cartItem); await db.draftCart.add(cartItem);
-                renderCart(); updateLivePreview();
-            }
-        }
-
-        function renderCart() {
-            let total = cart.reduce((sum, i) => sum + i.total, 0);
-            document.getElementById('cart-items').innerHTML = cart.map((i, index) => `
-                <div class="flex justify-between border-b py-1">
-                    <span>${i.name} x ${i.qty} ${i.discount > 0 ? '<small class="text-blue-600">(-'+i.discount+')</small>' : ''}</span>
-                    <div class="flex gap-2">
-                        <span>${i.total.toFixed(2)}</span>
-                        <button onclick="removeFromCart(${index})" class="text-red-500 font-bold">X</button>
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('cart-total').innerText = total.toFixed(2);
-        }
-
-        async function removeFromCart(index) {
-            const itemToRemove = cart[index];
-            if(itemToRemove.id) { await db.draftCart.delete(itemToRemove.id); }
-            cart.splice(index, 1); renderCart(); updateLivePreview();
-        }
-
-        function setPaymentMode(mode) {
-            paymentMode = mode;
-            document.getElementById('btn-cash').className = mode === 'cash' ? 'flex-1 rounded bg-green-700 text-white text-xs font-bold' : 'flex-1 rounded bg-gray-200 text-xs font-bold';
-            document.getElementById('btn-credit').className = mode === 'credit' ? 'flex-1 rounded bg-red-700 text-white text-xs font-bold' : 'flex-1 rounded bg-gray-200 text-xs font-bold';
-            updateLivePreview();
-        }
-
-        function updateLivePreview() {
-            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
-            const totalDiscount = cart.reduce((sum, i) => sum + i.discount, 0);
-            
-            document.getElementById('print-items').innerHTML = cart.map(i => {
-                const unitPriceAfterDiscount = i.total / i.qty;
-                return `
-                <div style="margin-bottom: 5px;">
-                    <div class="flex justify-between">
-                        <span style="width:15%">${i.qty}</span>
-                        <span style="width:25%">${i.price.toFixed(2)}</span>
-                        <span style="width:25%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
-                        <span style="width:35%; text-align:right">${i.total.toFixed(2)}</span>
-                    </div>
-                    <div style="font-weight:bold">${i.name}</div>
-                </div>
-            `}).join('');
-
-            let totalHtml = `<p>මුළු මුදල: LKR ${subtotal.toFixed(2)}</p>`;
-            if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
-                totalHtml += `<p class="font-bold">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
-            }
-            totalHtml += `<p>Payment: ${paymentMode.toUpperCase()}</p>`;
-            document.getElementById('print-totals').innerHTML = totalHtml;
-        }
 
         async function saveCustomer() {
             const name = document.getElementById('cust-name').value;
@@ -612,7 +620,9 @@
         async function init() {
             const savedCart = await db.draftCart.toArray();
             if(savedCart.length > 0) { cart = savedCart; renderCart(); }
-            loadLogo(); updateCustomerDropdown(); updateLivePreview();
+            loadLogo(); 
+            updateCustomerDropdown(); 
+            updateLivePreview();
             const savedName = localStorage.getItem('persistent_printer_name');
             if(savedName) { document.getElementById('printer-status').innerText = "Status: Saved Printer - " + savedName; }
         }
