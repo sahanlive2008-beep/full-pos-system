@@ -11,14 +11,14 @@
     <style>
         <link rel="manifest" href="manifest.json">
         @media print {
+            /* Hides everything except the print-area during printing */
             body * { visibility: hidden; }
             #print-area, #print-area * { visibility: visible; }
             #print-area { 
                 position: absolute; 
                 left: 0; 
                 top: 0; 
-                width: 100%; 
-                max-width: 58mm; 
+                width: 58mm; 
                 padding: 0; 
                 margin: 0; 
                 border: none; 
@@ -50,9 +50,14 @@
             padding: 6px;
             margin: 8px 0;
         }
+
+        /* Temporary wrapper for printing the image */
+        #temp-print-wrap { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 pb-24">
+
+    <div id="temp-print-wrap"></div>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black opacity-50 z-[70] hidden"></div>
     <nav id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-[80] shadow-xl p-4">
@@ -267,6 +272,7 @@
             alert("Saved printer forgotten.");
         }
 
+        // --- NEW: DIRECT PRINTING LOGIC ---
         async function directPrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
@@ -285,6 +291,7 @@
                 items: JSON.parse(JSON.stringify(cart))
             });
 
+            // Update Stock Levels
             for(let i of cart) {
                 if(i.code) {
                     const invItem = await db.inventory.get(i.code);
@@ -292,10 +299,10 @@
                 }
             }
 
-            // Trigger System Print
+            // Trigger System Print using the live preview div
             window.print();
 
-            // Clear Cart after printing starts
+            // Clear Cart after starting print process
             cart = []; 
             await db.draftCart.clear(); 
             renderCart(); 
