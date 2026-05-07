@@ -3,50 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Piyaratne Stores POS - Direct PNG Print</title>
+    <title>Piyaratne Stores POS</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 58mm; padding: 0; margin: 0; border: none; }
+        }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
+        .receipt-border { border: 2px solid black; border-radius: 10px; padding: 5px; margin-bottom: 5px; }
+        #live-preview-container { border: 2px dashed #3b82f6; background: white; margin-top: 20px; padding: 10px; }
         #sidebar { transition: transform 0.3s ease-in-out; transform: translateX(-100%); }
         #sidebar.open { transform: translateX(0); }
         .search-results { max-height: 200px; overflow-y: auto; border: 1px solid #ddd; display: none; }
-        
-        /* Receipt Styling for PNG Capture */
-        #print-area { 
-            width: 380px; 
-            padding: 15px; 
-            background: white; 
-            color: black; 
-            font-family: 'Courier New', Courier, monospace;
-            line-height: 1.2;
-            margin: 0 auto;
-        }
-        .receipt-border { border: 2px solid black; padding: 8px; margin-bottom: 10px; text-align: center; border-radius: 10px; }
-        #receipt-logo-img { max-width: 150px; max-height: 100px; margin: 0 auto 10px; display: none; object-fit: contain; }
-        
-        /* Hidden Print Frame */
+        .search-results div { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .search-results div:hover { background-color: #f3f4f6; }
+        #receipt-logo { max-width: 100%; height: auto; margin-bottom: 5px; display: none; }
+        #reader { width: 100% !important; min-height: 250px; background: #000; }
+        #reader video { object-fit: cover !important; }
+        /* Hidden iframe for silent printing */
         #print-frame { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 pb-24">
+    <iframe id="print-frame"></iframe>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black opacity-50 z-[70] hidden"></div>
-    
     <nav id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-[80] shadow-xl p-4">
-        <div class="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
-            <h2 class="font-bold text-xl">පියරත්න POS</h2>
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="font-bold text-xl">Menu</h2>
             <button onclick="toggleSidebar()" class="text-2xl">&times;</button>
         </div>
         <div class="flex flex-col gap-4 font-semibold">
-            <button onclick="showTab('billing'); toggleSidebar()" class="text-left py-2 border-b border-slate-700 hover:text-blue-400">🛒 BILLING</button>
-            <button onclick="showTab('inventory'); toggleSidebar()" class="text-left py-2 border-b border-slate-700 hover:text-blue-400">📦 STOCK</button>
-            <button onclick="showTab('customers'); toggleSidebar()" class="text-left py-2 border-b border-slate-700 hover:text-blue-400">👥 CUSTOMERS</button>
-            <button onclick="showTab('reports'); toggleSidebar()" class="text-left py-2 border-b border-slate-700 hover:text-blue-400">📊 REPORTS</button>
-            <button onclick="showTab('printer'); toggleSidebar()" class="text-left py-2 border-b border-slate-700 text-yellow-400">🖨️ PRINTER SETUP</button>
+            <button onclick="showTab('billing'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">🛒 BILLING</button>
+            <button onclick="showTab('inventory'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📦 STOCK</button>
+            <button onclick="showTab('add-items'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">➕ ADD ITEM</button>
+            <button onclick="showTab('customers'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">👥 CUSTOMERS</button>
+            <button onclick="showTab('reports'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📊 REPORTS</button>
+            <button onclick="showTab('printer'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">🖨️ PRINTER SETUP</button>
         </div>
     </nav>
 
@@ -55,86 +54,159 @@
             <button onclick="toggleSidebar()" class="text-2xl">☰</button>
             <h1 class="font-bold text-lg">පියරත්න සටොර්ස්</h1>
         </div>
-        <button onclick="startScanner()" class="bg-blue-500 px-4 py-1 rounded-full text-sm font-bold shadow-lg">📷 SCAN</button>
+        <div id="scanner-container" class="hidden fixed inset-0 bg-black z-[100] flex flex-col">
+            <div id="reader" style="flex: 1;"></div>
+            <button onclick="stopScanner()" class="bg-red-600 text-white w-full py-6 font-bold text-lg">Close Scanner</button>
+        </div>
+        <button onclick="startScanner()" class="bg-blue-500 px-3 py-1 rounded text-sm">📷 Scan</button>
     </header>
 
     <main class="p-2">
         <div id="tab-billing" class="tab-content active">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div class="bg-white p-4 rounded-xl shadow-lg space-y-4">
-                    <div class="relative">
-                        <label class="text-xs font-bold text-gray-500 uppercase">Search Item</label>
-                        <input type="text" id="bill-search" oninput="searchItems(this.value)" placeholder="Search..." class="w-full p-3 border-2 border-blue-400 rounded-lg">
-                        <div id="search-results" class="search-results absolute w-full bg-white z-10 shadow-2xl"></div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <input type="hidden" id="bill-code">
-                        <input type="number" id="bill-qty" value="1" step="0.001" class="w-full p-2 border-2 rounded-lg font-bold">
-                        <input type="number" id="bill-discount" value="0" class="w-full p-2 border-2 rounded-lg font-bold text-red-600">
-                    </div>
-
-                    <select id="bill-customer" class="w-full p-2 border-2 rounded-lg border-red-500 font-bold" onchange="updateLivePreview()">
-                        <option value="">Select Customer (Required)</option>
-                    </select>
-
-                    <div class="flex gap-2">
-                        <button onclick="setPaymentMode('cash')" id="btn-cash" class="flex-1 py-3 rounded-lg bg-green-700 text-white font-bold">CASH</button>
-                        <button onclick="setPaymentMode('credit')" id="btn-credit" class="flex-1 py-3 rounded-lg bg-gray-200 font-bold">CREDIT</button>
-                    </div>
-
-                    <button onclick="addToCart()" class="w-full bg-blue-600 text-white py-4 rounded-lg font-bold shadow-xl">ADD TO CART</button>
-                    <div id="cart-items" class="text-sm space-y-2 border-t pt-4"></div>
+            <div class="bg-white p-3 rounded shadow mb-3">
+                <div class="relative mb-3">
+                    <input type="text" id="bill-search" onclick="searchItems(this.value)" oninput="searchItems(this.value)" placeholder="Search Item Name or Code..." class="w-full p-3 border-2 border-blue-400 rounded-lg">
+                    <div id="search-results" class="search-results absolute w-full bg-white z-10 shadow-lg"></div>
+                </div>
+                
+                <input type="hidden" id="bill-code">
+                <div class="grid grid-cols-2 gap-2 mb-2 hidden"> 
+                    <input type="text" id="bill-name" readonly placeholder="Selected Item" class="p-2 border rounded bg-gray-100 font-bold">
+                    <input type="number" id="bill-qty" value="1" step="0.001" class="p-2 border rounded w-full" placeholder="Qty">
                 </div>
 
-                <div class="bg-gray-400 p-4 rounded-xl shadow-inner">
-                    <p class="text-center font-bold text-xs text-white mb-3 uppercase">Live Preview</p>
-                    <div id="print-area" class="shadow-2xl">
-                        <div class="receipt-border">
-                            <img id="receipt-logo-img" src="" alt="Logo">
-                            <p class="font-bold text-xl">පියරත්න සටොර්ස්</p>
-                            <p class="text-sm">දාගම-මාඒළිය | 075 4990060</p>
-                        </div>
-                        <div class="flex justify-between border-b-2 border-black font-bold text-[11px] mb-1">
-                            <span style="width:15%">Qty</span><span style="width:25%">Price</span><span style="width:25%">Net</span><span style="width:35%; text-align:right">Total</span>
-                        </div>
-                        <div id="print-items" class="text-[11px]"></div>
-                        <hr class="border-black my-2">
-                        <div id="print-totals" class="text-right font-bold text-xs space-y-1"></div>
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                    <div class="md:col-span-4">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">පාරිභෝගිකයා (Customer)</label>
+                        <select id="bill-customer" class="w-full p-2 border rounded border-red-500 text-sm" onchange="updateLivePreview()">
+                            <option value="">Select Customer (Required)</option>
+                        </select>
                     </div>
-                    <button onclick="preparePrint()" class="w-full bg-orange-600 text-white py-5 rounded-xl mt-6 font-bold text-xl shadow-2xl hover:bg-orange-700">
-                        FINISH & PRINT PNG
-                    </button>
+                    
+                    <div class="md:col-span-2">
+                        <label class="text-[10px] font-bold text-blue-600 uppercase">වට්ටම් (Discount)</label>
+                        <input type="number" id="bill-discount" value="0" step="0.01" class="p-2 border border-blue-300 rounded w-full text-sm">
+                    </div>
+
+                    <div class="md:col-span-4 flex gap-1 h-[38px]">
+                        <button onclick="setPaymentMode('cash')" id="btn-cash" class="flex-1 rounded bg-green-700 text-white text-xs font-bold">CASH</button>
+                        <button onclick="setPaymentMode('credit')" id="btn-credit" class="flex-1 rounded bg-gray-200 text-xs font-bold">CREDIT</button>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <button onclick="addUnlistedItem()" class="w-full h-[38px] text-blue-600 text-[10px] border border-blue-600 rounded font-bold uppercase leading-tight">+ Unlisted Item</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded shadow p-3">
+                <div id="cart-items" class="text-sm"></div>
+                <div class="mt-4 border-t pt-2">
+                    <div class="flex justify-between text-lg font-bold">
+                        <span>Total (LKR):</span>
+                        <span id="cart-total">0.00</span>
+                    </div>
+                    <button onclick="preparePrint()" class="w-full bg-blue-600 text-white py-3 rounded mt-3 font-bold">FINISH & PRINT</button>
+                </div>
+            </div>
+
+            <div id="live-preview-container">
+                <p class="text-xs font-bold text-blue-600 mb-2">LIVE PRINT PREVIEW:</p>
+                <div id="print-area" class="text-black leading-tight bg-white p-2 mx-auto" style="font-size: 10px; font-family: 'Courier New', Courier, monospace; width: 58mm; border: 1px solid #ccc;">
+                    <div class="receipt-border text-center">
+                        <img id="receipt-logo" src="" alt="Logo">
+                        <p class="font-bold text-sm">පියරත්න සටොර්ස්</p>
+                        <p>දාගම-මාඒළිය</p>
+                        <p>075 4990060</p>
+                        <p>ග්‍රොරොසරි & හාර්ඩ්වෙයාර්</p>
+                        <p>අඩුම මිලට ඔබේ තැන</p>
+                    </div>
+                    <div class="flex justify-between border-b border-black mb-1">
+                        <span style="width:15%">ප්‍රමා.</span>
+                        <span style="width:25%">සි මිල</span>
+                        <span style="width:25%">අපේ මිල</span>
+                        <span style="width:35%; text-align:right">මුදල.</span>
+                    </div>
+                    <div id="print-items"></div>
+                    <hr class="border-black">
+                    <div id="print-totals" class="text-right mt-1"></div>
+                    <div class="text-center mt-2">ස්තූතියි නැවත එන්න!</div>
                 </div>
             </div>
         </div>
 
         <div id="tab-printer" class="tab-content">
-            <div class="bg-white p-6 rounded-xl shadow-lg max-w-lg mx-auto">
-                <h2 class="font-bold text-xl mb-4 border-b pb-2">🖨️ Printer & Logo</h2>
-                <div>
-                    <label class="block text-sm font-bold text-gray-600 mb-2 uppercase">Upload Shop Logo:</label>
-                    <input type="file" id="logo-upload" accept="image/*" onchange="handleLogoUpload(event)" class="w-full p-2 border-2 border-dashed border-blue-300 rounded-lg">
+            <div class="bg-white p-4 rounded shadow">
+                <h2 class="font-bold mb-4">Printer & Branding Setup</h2>
+                <div class="mb-6 p-3 border rounded bg-blue-50">
+                    <label class="block font-bold text-sm mb-2">Upload Bill Logo Image:</label>
+                    <input type="file" id="logo-upload" accept="image/*" onchange="handleLogoUpload(this)" class="text-sm">
+                    <button onclick="removeLogo()" class="mt-2 text-red-500 text-xs block underline">Remove Logo</button>
                 </div>
-                <div id="printer-logo-preview" class="hidden mt-4 p-4 bg-gray-50 rounded-lg border text-center">
-                    <img id="setup-logo-img" src="" class="max-h-32 mx-auto">
-                    <button onclick="removeLogo()" class="mt-2 text-red-600 text-xs font-bold underline">Remove</button>
+                <div id="printer-status" class="mb-4 p-3 bg-gray-100 rounded text-sm text-gray-600">Status: Not Connected</div>
+                <button onclick="connectBluetooth()" class="w-full bg-blue-600 text-white py-3 rounded font-bold mb-2">🔍 Search & Connect Printer</button>
+                <button onclick="testPrint()" class="w-full bg-gray-200 text-gray-800 py-2 rounded">Test Connection</button>
+            </div>
+        </div>
+
+        <div id="tab-inventory" class="tab-content">
+            <h2 class="font-bold mb-2">Inventory Management</h2>
+            <div id="inventory-list" class="space-y-2"></div>
+        </div>
+
+        <div id="tab-add-items" class="tab-content">
+            <div class="bg-white p-4 rounded shadow">
+                <h2 class="font-bold mb-4">Setup New Item</h2>
+                <input type="text" id="add-code" placeholder="Item Code" class="w-full p-2 border mb-2">
+                <input type="text" id="add-name" placeholder="Item Name" class="w-full p-2 border mb-2">
+                <input type="number" id="add-price" placeholder="Selling Price (LKR)" class="w-full p-2 border mb-2">
+                <input type="number" id="add-wholesale" placeholder="Wholesale Price" class="w-full p-2 border mb-2">
+                <input type="number" id="add-stock" placeholder="Initial Stock" class="w-full p-2 border mb-2">
+                <button onclick="saveNewItem()" class="w-full bg-blue-600 text-white py-2 rounded">Save Product</button>
+            </div>
+        </div>
+
+        <div id="tab-customers" class="tab-content">
+            <div class="bg-white p-4 rounded shadow mb-4">
+                <input type="text" id="cust-name" placeholder="Customer Name" class="w-full p-2 border mb-2">
+                <input type="text" id="cust-phone" placeholder="Phone Number" class="w-full p-2 border mb-2">
+                <button onclick="saveCustomer()" class="w-full bg-blue-600 text-white py-2 rounded">Add Customer</button>
+            </div>
+            <div id="customer-list" class="space-y-2"></div>
+        </div>
+
+        <div id="tab-reports" class="tab-content">
+            <div class="bg-white p-4 rounded shadow mb-4">
+                <h2 class="font-bold mb-3 underline text-blue-800">Business Reports</h2>
+                <div class="flex gap-2 mb-4">
+                    <button onclick="setReportFilter('day')" id="filter-day" class="flex-1 bg-blue-600 text-white py-2 rounded text-xs font-bold uppercase">Daily</button>
+                    <button onclick="setReportFilter('week')" id="filter-week" class="flex-1 bg-blue-100 text-blue-800 py-2 rounded text-xs font-bold uppercase">Weekly</button>
+                    <button onclick="setReportFilter('month')" id="filter-month" class="flex-1 bg-blue-100 text-blue-800 py-2 rounded text-xs font-bold uppercase">Monthly</button>
                 </div>
-                <div class="mt-6 p-4 bg-blue-50 border rounded text-xs text-blue-700">
-                    <p><b>Print Mode:</b> PNG Capture</p>
-                    <p>This will capture your bill as an image and open the system print menu. Select your thermal printer from the list.</p>
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="bg-green-100 p-3 rounded border border-green-200">
+                        <p class="text-[10px] uppercase font-bold text-green-700">Total Profit</p>
+                        <h1 id="rep-profit" class="text-xl font-bold">LKR 0.00</h1>
+                    </div>
+                    <div class="bg-blue-100 p-3 rounded border border-blue-200">
+                        <p class="text-[10px] uppercase font-bold text-blue-700">Total Sales</p>
+                        <h1 id="rep-sales" class="text-xl font-bold">LKR 0.00</h1>
+                    </div>
+                </div>
+                <div class="border-t pt-4">
+                    <h3 class="font-bold text-sm mb-3 flex justify-between">
+                        <span>Invoice History (All Bills)</span>
+                        <span class="text-[10px] text-gray-400">Click to view items</span>
+                    </h3>
+                    <div id="bill-history-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
                 </div>
             </div>
         </div>
-        
-        <div id="tab-inventory" class="tab-content"><div id="inventory-list" class="space-y-2"></div></div>
-        <div id="tab-customers" class="tab-content"><div id="customer-list" class="space-y-2"></div></div>
-        <div id="tab-reports" class="tab-content"><div id="bill-history-list" class="space-y-2"></div></div>
     </main>
 
     <script>
-        const db = new Dexie("PiyaratneStoresDB");
-        db.version(2).stores({
+        const db = new Dexie("PiyaratnePOS");
+        db.version(3).stores({
             inventory: "code, name, price, wholesale, stock",
             customers: "name, phone, status, creditAmount",
             sales: "++id, date, total, profit, customer, type, items",
@@ -143,26 +215,18 @@
 
         let cart = [];
         let paymentMode = 'cash';
+        let bleDevice = null;
+        let bleCharacteristic = null;
+        let currentFilter = 'day';
 
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('open');
-            document.getElementById('sidebar-overlay').classList.toggle('hidden');
-        }
-
-        function showTab(id) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById('tab-' + id).classList.add('active');
-            if(id === 'inventory') renderInventory();
-            if(id === 'customers') renderCustomers();
-        }
-
-        // --- LOGO MANAGEMENT ---
-        function handleLogoUpload(event) {
-            const file = event.target.files[0];
+        // Logic for Search, Sidebar, and Tabs remains same...
+        function handleLogoUpload(input) {
+            const file = input.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = (e) => {
-                    localStorage.setItem('pos_logo', e.target.result);
+                reader.onload = function(e) {
+                    const base64 = e.target.result;
+                    localStorage.setItem('bill_logo', base64);
                     loadLogo();
                 };
                 reader.readAsDataURL(file);
@@ -170,93 +234,481 @@
         }
 
         function loadLogo() {
-            const saved = localStorage.getItem('pos_logo');
-            if (saved) {
-                document.getElementById('receipt-logo-img').src = saved;
-                document.getElementById('receipt-logo-img').style.display = 'block';
-                document.getElementById('setup-logo-img').src = saved;
-                document.getElementById('printer-logo-preview').classList.remove('hidden');
+            const logoBase64 = localStorage.getItem('bill_logo');
+            const imgElement = document.getElementById('receipt-logo');
+            if (logoBase64) {
+                imgElement.src = logoBase64;
+                imgElement.style.display = 'block';
+            } else {
+                imgElement.style.display = 'none';
             }
         }
 
-        function removeLogo() { localStorage.removeItem('pos_logo'); location.reload(); }
-
-        // --- CORE LOGIC (Kept from before) ---
-        async function searchItems(query) {
-            const resultsDiv = document.getElementById('search-results');
-            if (query.length < 1) { resultsDiv.style.display = 'none'; return; }
-            const items = await db.inventory.filter(i => i.name.toLowerCase().includes(query.toLowerCase()) || i.code.includes(query)).toArray();
-            resultsDiv.innerHTML = items.map(i => `<div class="p-2 border-b" onclick="selectItem('${i.code}','${i.name}')">${i.name}</div>`).join('');
-            resultsDiv.style.display = 'block';
+        function removeLogo() {
+            localStorage.removeItem('bill_logo');
+            loadLogo();
         }
 
-        function selectItem(code, name) {
+        async function searchItems(query) {
+            const resultsDiv = document.getElementById('search-results');
+            let items;
+            if (query.length < 1) {
+                items = await db.inventory.limit(20).toArray();
+            } else {
+                items = await db.inventory
+                    .filter(item => 
+                        item.name.toLowerCase().includes(query.toLowerCase()) || 
+                        item.code.toLowerCase().includes(query.toLowerCase())
+                    ).toArray();
+            }
+
+            if (items.length > 0) {
+                resultsDiv.innerHTML = items.map(i => `
+                    <div onclick="selectSearchResult('${i.code}', '${i.name}')">
+                        <span class="font-bold">${i.name}</span> <span class="text-xs text-gray-500">(${i.code})</span>
+                        <p class="text-xs">Price: LKR ${i.price} | Stock: ${i.stock}</p>
+                    </div>
+                `).join('');
+                resultsDiv.style.display = 'block';
+            } else {
+                resultsDiv.style.display = 'none';
+            }
+        }
+
+        async function selectSearchResult(code, name) {
+            const qtyInput = prompt(`Enter Quantity for ${name}:`, "1");
+            if (qtyInput === null) {
+                document.getElementById('search-results').style.display = 'none';
+                document.getElementById('bill-search').focus();
+                return;
+            }
+            const qty = parseFloat(qtyInput);
+            if (isNaN(qty) || qty <= 0) {
+                alert("Invalid quantity");
+                document.getElementById('bill-search').focus();
+                return;
+            }
             document.getElementById('bill-code').value = code;
-            document.getElementById('bill-search').value = name;
+            document.getElementById('bill-name').value = name;
+            document.getElementById('bill-qty').value = qty;
+            await addToCart();
+            document.getElementById('bill-search').value = '';
             document.getElementById('search-results').style.display = 'none';
+            setTimeout(() => { document.getElementById('bill-search').focus(); }, 100);
+        }
+
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sb.classList.toggle('open');
+            overlay.classList.toggle('hidden');
+        }
+
+        async function connectBluetooth() {
+            const status = document.getElementById('printer-status');
+            try {
+                status.innerText = "Connecting...";
+                bleDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, { namePrefix: 'RP' }, { namePrefix: 'MTP' }],
+                    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
+                });
+                localStorage.setItem('saved_printer_id', bleDevice.id);
+                const server = await bleDevice.gatt.connect();
+                const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+                bleCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+                status.innerText = "Status: Connected to " + bleDevice.name;
+            } catch (err) {
+                status.innerText = "Error: " + err.message;
+            }
+        }
+
+        async function testPrint() {
+            if (!bleCharacteristic) return alert("Connect printer first!");
+            const encoder = new TextEncoder();
+            const data = encoder.encode("Piyaratne Stores\nConnection Test\n\n\n");
+            await bleCharacteristic.writeValue(data);
+        }
+
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + id).classList.add('active');
+            if(id === 'inventory') renderInventory();
+            if(id === 'customers') renderCustomers();
+            if(id === 'billing') updateCustomerDropdown();
+            if(id === 'reports') calculateReports();
+        }
+
+        async function saveNewItem() {
+            const item = {
+                code: document.getElementById('add-code').value,
+                name: document.getElementById('add-name').value,
+                price: parseFloat(document.getElementById('add-price').value),
+                wholesale: parseFloat(document.getElementById('add-wholesale').value),
+                stock: parseFloat(document.getElementById('add-stock').value)
+            };
+            await db.inventory.put(item);
+            alert("Saved!");
+            showTab('inventory');
+        }
+
+        async function renderInventory() {
+            const items = await db.inventory.toArray();
+            document.getElementById('inventory-list').innerHTML = items.map(i => `
+                <div class="bg-white p-2 rounded shadow flex justify-between items-center ${i.stock < 10 ? 'border-l-4 border-red-500' : ''}">
+                    <div>
+                        <p class="font-bold">${i.name} [${i.code}]</p>
+                        <p class="text-xs">Stock: ${i.stock} | Cost: ${i.wholesale}</p>
+                    </div>
+                    <div class="text-right">
+                        <input type="number" step="0.001" onchange="updateStock('${i.code}', this.value)" value="${i.stock}" class="w-16 border rounded text-center mb-1"><br>
+                        <input type="number" onchange="updatePrice('${i.code}', this.value)" value="${i.price}" class="w-16 border rounded text-center">
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function updateStock(code, val) { await db.inventory.update(code, {stock: parseFloat(val)}); }
+        async function updatePrice(code, val) { await db.inventory.update(code, {price: parseFloat(val)}); }
+
+        async function checkItemCode(code) {
+            const item = await db.inventory.get(code);
+            if(item) { selectSearchResult(item.code, item.name); }
         }
 
         async function addToCart() {
             const code = document.getElementById('bill-code').value;
+            const qty = parseFloat(document.getElementById('bill-qty').value);
+            const discount = parseFloat(document.getElementById('bill-discount').value) || 0;
             const item = await db.inventory.get(code);
+            
             if(item) {
-                const qty = parseFloat(document.getElementById('bill-qty').value);
-                const discount = parseFloat(document.getElementById('bill-discount').value) || 0;
-                cart.push({ ...item, qty, discount, total: (item.price * qty) - discount });
+                if(item.stock - qty < 10) {
+                    alert(`⚠️ Low Stock: ${item.name} is under 10! Remaining: ${(item.stock - qty).toFixed(2)}`);
+                }
+                const cartItem = {
+                    ...item, 
+                    qty: qty, 
+                    discount: discount,
+                    total: (item.price * qty) - discount
+                };
+                cart.push(cartItem);
+                await db.draftCart.add(cartItem);
+                renderCart();
+                document.getElementById('bill-code').value = '';
+                document.getElementById('bill-name').value = '';
+                document.getElementById('bill-qty').value = '1';
+                document.getElementById('bill-discount').value = '0';
+                updateLivePreview();
+            }
+        }
+
+        async function addUnlistedItem() {
+            const name = prompt("Item Name:");
+            const priceInput = prompt("Price (LKR):");
+            const price = parseFloat(priceInput);
+            if(name && !isNaN(price)) {
+                const cartItem = { name, price, qty: 1, wholesale: price, total: price, discount: 0 };
+                cart.push(cartItem);
+                await db.draftCart.add(cartItem);
                 renderCart();
                 updateLivePreview();
             }
         }
 
         function renderCart() {
-            document.getElementById('cart-items').innerHTML = cart.map((i, idx) => `
-                <div class="flex justify-between border-b p-1"><span>${i.name} x ${i.qty}</span><span>${i.total.toFixed(2)}</span></div>
+            let total = cart.reduce((sum, i) => sum + i.total, 0);
+            document.getElementById('cart-items').innerHTML = cart.map((i, index) => `
+                <div class="flex justify-between border-b py-1">
+                    <span>${i.name} x ${i.qty} ${i.discount > 0 ? '<small class="text-blue-600">(-'+i.discount+')</small>' : ''}</span>
+                    <div class="flex gap-2">
+                        <span>${i.total.toFixed(2)}</span>
+                        <button onclick="removeFromCart(${index})" class="text-red-500 font-bold">X</button>
+                    </div>
+                </div>
             `).join('');
+            document.getElementById('cart-total').innerText = total.toFixed(2);
         }
 
-        function updateLivePreview() {
-            document.getElementById('print-items').innerHTML = cart.map(i => `
-                <div class="flex justify-between"><span>${i.qty}</span><span>${i.price}</span><span>${i.total.toFixed(2)}</span></div>
-                <div class="font-bold">${i.name}</div>
-            `).join('');
-            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            document.getElementById('print-totals').innerHTML = `<p>TOTAL: LKR ${subtotal.toFixed(2)}</p>`;
-        }
-
-        // --- DIRECT PNG PRINT FUNCTION ---
-        async function preparePrint() {
-            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            const cash = parseFloat(prompt("Cash Received:") || "0");
-            document.getElementById('print-totals').innerHTML += `<p>CASH: ${cash.toFixed(2)}</p><p>BALANCE: ${(cash - subtotal).toFixed(2)}</p>`;
-
-            // 1. Capture the receipt as PNG
-            const canvas = await html2canvas(document.getElementById('print-area'), { scale: 3 });
-            const dataURL = canvas.toDataURL("image/png");
-
-            // 2. Open a new window and print only the image
-            const printWin = window.open('', '_blank');
-            printWin.document.write(`
-                <html>
-                    <body style="margin:0; text-align:center;">
-                        <img src="${dataURL}" style="width:100%; max-width:380px;">
-                        <script>
-                            window.onload = function() { 
-                                window.print(); 
-                                setTimeout(() => { window.close(); }, 500);
-                            };
-                        <\/script>
-                    </body>
-                </html>
-            `);
-            printWin.document.close();
-
-            // Clear and Save (Logic remains)
-            cart = [];
+        async function removeFromCart(index) {
+            const itemToRemove = cart[index];
+            if(itemToRemove.id) {
+                await db.draftCart.delete(itemToRemove.id);
+            } else {
+                await db.draftCart.clear();
+                cart.splice(index, 1);
+                for(let item of cart) await db.draftCart.add(item);
+            }
+            cart.splice(index, 1);
             renderCart();
             updateLivePreview();
         }
 
-        loadLogo();
+        function setPaymentMode(mode) {
+            paymentMode = mode;
+            document.getElementById('btn-cash').className = mode === 'cash' ? 'flex-1 rounded bg-green-700 text-white text-xs font-bold' : 'flex-1 rounded bg-gray-200 text-xs font-bold';
+            document.getElementById('btn-credit').className = mode === 'credit' ? 'flex-1 rounded bg-red-700 text-white text-xs font-bold' : 'flex-1 rounded bg-gray-200 text-xs font-bold';
+            updateLivePreview();
+        }
+
+        function updateLivePreview() {
+            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
+            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            const totalDiscount = cart.reduce((sum, i) => sum + i.discount, 0);
+            
+            document.getElementById('print-items').innerHTML = cart.map(i => {
+                const unitPriceAfterDiscount = i.total / i.qty;
+                return `
+                <div class="flex justify-between">
+                    <span style="width:15%">${i.qty}</span>
+                    <span style="width:25%">${i.price.toFixed(2)}</span>
+                    <span style="width:25%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
+                    <span style="width:35%; text-align:right">${i.total.toFixed(2)}</span>
+                </div>
+                <div style="font-weight:bold">${i.name}</div>
+            `}).join('');
+
+            let totalHtml = `<p>SUBTOTAL: LKR ${subtotal.toFixed(2)}</p>`;
+            if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
+                totalHtml += `<p class="font-bold">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
+            }
+            totalHtml += `<p>Payment: ${paymentMode.toUpperCase()}</p>`;
+            document.getElementById('print-totals').innerHTML = totalHtml;
+        }
+
+        // --- UPDATED PREPAREPRINT WITH PNG CONVERSION ---
+        async function preparePrint() {
+            const custName = document.getElementById('bill-customer').value;
+            if(!custName) return alert("Please select a customer");
+
+            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
+            const cashGaveInput = prompt("ලැබූ මුදල (Amount Received):", subtotal) || "0";
+            const cashGave = parseFloat(cashGaveInput);
+            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            
+            let creditAmount = Math.max(0, subtotal - cashGave);
+            let balance = Math.max(0, cashGave - subtotal);
+
+            // Final Update UI
+            let totalHtml = `
+                <p>SUBTOTAL: LKR ${subtotal.toFixed(2)}</p>
+                <p>මුදල: LKR ${cashGave.toFixed(2)}</p>
+                <p>ඉතිරි: LKR ${balance.toFixed(2)}</p>
+            `;
+            if(creditAmount > 0) totalHtml += `<p style="color:red; font-weight:bold">ණය (Credit): LKR ${creditAmount.toFixed(2)}</p>`;
+            document.getElementById('print-totals').innerHTML = totalHtml;
+
+            // Database Save
+            await db.sales.add({
+                date: new Date().getTime(),
+                total: subtotal,
+                profit: profit,
+                customer: custName,
+                type: creditAmount > 0 ? 'credit' : 'cash',
+                items: JSON.parse(JSON.stringify(cart))
+            });
+
+            // Update Stock
+            for(let i of cart) {
+                if(i.code) {
+                    const invItem = await db.inventory.get(i.code);
+                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
+                }
+            }
+
+            // PNG GENERATION & SILENT PRINT
+            const printArea = document.getElementById('print-area');
+            html2canvas(printArea, { scale: 3 }).then(async canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                
+                // Silent Printing via Hidden Iframe
+                const pFrame = document.getElementById('print-frame');
+                const pDoc = pFrame.contentWindow.document;
+                pDoc.open();
+                pDoc.write(`<html><body style="margin:0;"><img src="${imgData}" style="width:100%;"></body></html>`);
+                pDoc.close();
+                
+                setTimeout(() => {
+                    pFrame.contentWindow.focus();
+                    pFrame.contentWindow.print();
+                }, 500);
+
+                // Bluetooth Fallback
+                if(bleCharacteristic) {
+                    try {
+                        const encoder = new TextEncoder();
+                        const data = encoder.encode(printArea.innerText + "\n\n\n");
+                        await bleCharacteristic.writeValue(data);
+                    } catch(e) { console.log("BT Failed", e); }
+                }
+
+                // RawBT Intent Fallback
+                const base64Clean = imgData.split(',')[1];
+                window.location.href = "intent://base64," + base64Clean + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+
+                // Clear Cart
+                cart = [];
+                await db.draftCart.clear();
+                renderCart();
+                updateLivePreview();
+            });
+        }
+
+        async function saveCustomer() {
+            const name = document.getElementById('cust-name').value;
+            if(!name) return alert("Name is required");
+            const existing = await db.customers.get(name);
+            if(existing) return alert("Customer already exists");
+            await db.customers.add({ name, phone: document.getElementById('cust-phone').value, status: 'cash', creditAmount: 0 });
+            renderCustomers();
+        }
+
+        async function settleCredit(name) {
+            const amount = parseFloat(prompt(`Enter amount paid by ${name}:`));
+            if(isNaN(amount) || amount <= 0) return;
+            const c = await db.customers.get(name);
+            const newAmount = Math.max(0, c.creditAmount - amount);
+            await db.customers.update(name, { 
+                creditAmount: newAmount, 
+                status: newAmount <= 0 ? 'cash' : 'credit' 
+            });
+            await db.sales.add({
+                date: new Date().getTime(),
+                total: amount,
+                profit: 0,
+                customer: name,
+                type: 'settlement',
+                items: [{name: 'Credit Settlement', price: amount, qty: 1, total: amount}]
+            });
+            alert("Settled!");
+            renderCustomers();
+        }
+
+        async function renderCustomers() {
+            const list = await db.customers.toArray();
+            document.getElementById('customer-list').innerHTML = list.map(c => `
+                <div class="bg-white p-3 rounded flex justify-between shadow">
+                    <div>
+                        <p class="font-bold">${c.name}</p>
+                        <p class="text-xs ${c.status === 'credit' ? 'text-red-500' : 'text-green-500'} font-bold uppercase">${c.status} : ${c.creditAmount.toFixed(2)} LKR</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="settleCredit('${c.name}')" class="text-xs bg-green-100 p-2 rounded border border-green-500">Settle Pay</button>
+                        <button onclick="toggleCustStatus('${c.name}')" class="text-xs bg-blue-100 p-2 rounded">Switch</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function toggleCustStatus(name) {
+            const c = await db.customers.get(name);
+            const newStatus = c.status === 'cash' ? 'credit' : 'cash';
+            await db.customers.update(name, {status: newStatus});
+            renderCustomers();
+        }
+
+        async function updateCustomerDropdown() {
+            const list = await db.customers.toArray();
+            document.getElementById('bill-customer').innerHTML = '<option value="">Select Customer (Required)</option>' + 
+                list.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        }
+
+        let html5QrCode;
+        async function startScanner() {
+            document.getElementById('scanner-container').classList.remove('hidden');
+            html5QrCode = new Html5Qrcode("reader");
+            const qrConfig = { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.0 };
+            try {
+                await html5QrCode.start({ facingMode: "environment" }, qrConfig, async (decodedText) => {
+                    const item = await db.inventory.get(decodedText);
+                    if(item) {
+                        stopScanner();
+                        selectSearchResult(item.code, item.name);
+                    } else {
+                        alert("අයිතමය හමු නොවීය (Item not found): " + decodedText);
+                    }
+                });
+            } catch (err) {
+                alert("කැමරාව ක්‍රියාත්මක කළ නොහැක. Please check permissions.");
+                stopScanner();
+            }
+        }
+
+        function stopScanner() {
+            if(html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('scanner-container').classList.add('hidden');
+                }).catch(err => {
+                    document.getElementById('scanner-container').classList.add('hidden');
+                });
+            } else {
+                document.getElementById('scanner-container').classList.add('hidden');
+            }
+        }
+
+        function setReportFilter(range) {
+            currentFilter = range;
+            const filters = ['day', 'week', 'month'];
+            filters.forEach(f => {
+                const btn = document.getElementById('filter-' + f);
+                if(f === range) {
+                    btn.classList.replace('bg-blue-100', 'bg-blue-600');
+                    btn.classList.replace('text-blue-800', 'text-white');
+                } else {
+                    btn.classList.replace('bg-blue-600', 'bg-blue-100');
+                    btn.classList.replace('text-white', 'text-blue-800');
+                }
+            });
+            calculateReports();
+        }
+
+        async function calculateReports() {
+            const now = new Date();
+            let startTime;
+            if (currentFilter === 'day') { startTime = new Date().setHours(0,0,0,0); }
+            else if (currentFilter === 'week') { startTime = now.setDate(now.getDate() - 7); }
+            else { startTime = now.setMonth(now.getMonth() - 1); }
+
+            const sales = await db.sales.filter(s => s.date >= startTime).toArray();
+            const totalProfit = sales.reduce((s, a) => s + a.profit, 0);
+            const totalSales = sales.reduce((s, a) => s + a.total, 0);
+
+            document.getElementById('rep-profit').innerText = `LKR ${totalProfit.toFixed(2)}`;
+            document.getElementById('rep-sales').innerText = `LKR ${totalSales.toFixed(2)}`;
+
+            const historyList = document.getElementById('bill-history-list');
+            historyList.innerHTML = sales.reverse().map(s => `
+                <div class="border p-2 rounded text-sm bg-gray-50 hover:bg-blue-50 cursor-pointer transition shadow-sm" onclick="viewBillDetails(${s.id})">
+                    <div class="flex justify-between font-bold">
+                        <span>${s.customer}</span>
+                        <span>LKR ${s.total.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-gray-500">
+                        <span>${new Date(s.date).toLocaleString()}</span>
+                        <span class="${s.type === 'credit' ? 'text-red-500' : (s.type === 'settlement' ? 'text-blue-500' : 'text-green-600')} font-bold uppercase">${s.type}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function viewBillDetails(id) {
+            const sale = await db.sales.get(id);
+            if (!sale || !sale.items) return;
+            let itemDetails = sale.items.map(i => `• ${i.name} (${i.qty}) = LKR ${i.total.toFixed(2)}`).join('\n');
+            alert(`INVOICE DETAILS\nCustomer: ${sale.customer}\nType: ${sale.type.toUpperCase()}\n\nItems:\n${itemDetails}\n\nTotal: LKR ${sale.total.toFixed(2)}`);
+        }
+
+        async function init() {
+            const savedCart = await db.draftCart.toArray();
+            if(savedCart.length > 0) {
+                cart = savedCart;
+                renderCart();
+            }
+            loadLogo();
+            updateCustomerDropdown();
+            updateLivePreview();
+        }
+        
+        init();
     </script>
 </body>
 </html>
