@@ -313,19 +313,19 @@
             try {
                 status.innerText = "Connecting...";
                 bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, { namePrefix: 'RP' }, { namePrefix: 'MTP' }],
-                    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
+                    acceptAllDevices: true,
+                    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7e11101-c126-42f1-aa96-dd0fb464c3c2']
                 });
-
-                // Auto-reconnection logic: Save the device name/info
-                localStorage.setItem('saved_printer_name', bleDevice.name);
                 
                 const server = await bleDevice.gatt.connect();
-                const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
-                bleCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+                // Common thermal printer services
+                const services = await server.getPrimaryServices();
+                let targetService = services[0];
+                const characteristics = await targetService.getCharacteristics();
+                bleCharacteristic = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse);
+
                 status.innerText = "Status: Connected to " + bleDevice.name;
-                
-                // Add event listener to handle disconnection
+                localStorage.setItem('saved_printer_name', bleDevice.name);
                 bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
                 
             } catch (err) {
@@ -334,17 +334,14 @@
         }
 
         function onDisconnected() {
-            document.getElementById('printer-status').innerText = "Status: Disconnected. Reconnecting...";
-            // Attempt auto-reconnect if it was previously saved
-            if (localStorage.getItem('saved_printer_name')) {
-                setTimeout(connectBluetooth, 3000);
-            }
+            document.getElementById('printer-status').innerText = "Status: Disconnected.";
+            bleCharacteristic = null;
         }
 
         async function testPrint() {
             if (!bleCharacteristic) return alert("Connect printer first!");
             const encoder = new TextEncoder();
-            const data = encoder.encode("Piyaratne Stores\nConnection Test\n\n\n");
+            const data = encoder.encode("\x1b\x40" + "Piyaratne Stores\nConnection Test\n\n\n");
             await bleCharacteristic.writeValue(data);
         }
 
@@ -494,6 +491,42 @@
             document.getElementById('print-totals').innerHTML = totalHtml;
         }
 
+        // --- NEW IMAGE TO ESC/POS BITMAP CONVERTER ---
+        function getEscPosImageData(canvas) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const width = canvas.width;
+            const height = canvas.height;
+            const threshold = 128;
+            const bytesWide = Math.ceil(width / 8);
+            
+            const escPosData = [0x1B, 0x40]; // Initialize
+            
+            for (let y = 0; y < height; y++) {
+                // Command: GS v 0 m xL xH yL yH
+                escPosData.push(0x1D, 0x76, 0x30, 0x00);
+                escPosData.push(bytesWide & 0xFF, (bytesWide >> 8) & 0xFF);
+                escPosData.push(0x01, 0x00); // 1 pixel height per row
+                
+                for (let b = 0; b < bytesWide; b++) {
+                    let byte = 0;
+                    for (let bit = 0; bit < 8; bit++) {
+                        const x = (b * 8) + bit;
+                        if (x < width) {
+                            const i = (y * width + x) * 4;
+                            const brightness = (imageData.data[i] + imageData.data[i+1] + imageData.data[i+2]) / 3;
+                            if (brightness < threshold) {
+                                byte |= (1 << (7 - bit));
+                            }
+                        }
+                    }
+                    escPosData.push(byte);
+                }
+            }
+            escPosData.push(0x1B, 0x64, 0x03); // Feed 3 lines
+            return new Uint8Array(escPosData);
+        }
+
         async function preparePrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
@@ -536,12 +569,25 @@
 
             document.getElementById('print-totals').innerHTML = totalHtml;
 
-            // --- PNG CONVERSION & RAWBT PRINTING ---
+            // --- PNG TO PRINTER LOGIC ---
             const printArea = document.getElementById('print-area');
-            html2canvas(printArea, { scale: 3 }).then(async (canvas) => {
-                const base64Image = canvas.toDataURL("image/png").split(',')[1];
-                // Sending image to RawBT app using Intent
-                window.location.href = "intent://base64," + base64Image + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+            html2canvas(printArea, { scale: 2 }).then(async (canvas) => {
+                if (bleCharacteristic) {
+                    try {
+                        const printerData = getEscPosImageData(canvas);
+                        // Send in chunks to avoid BLE buffer overflow
+                        const chunkSize = 512;
+                        for (let i = 0; i < printerData.length; i += chunkSize) {
+                            await bleCharacteristic.writeValue(printerData.slice(i, i + chunkSize));
+                        }
+                    } catch (e) {
+                        console.error("Print failed", e);
+                        alert("Bluetooth Print Failed. Try reconnecting.");
+                    }
+                } else {
+                    alert("Printer not connected! Using browser print fallback.");
+                    window.print();
+                }
             });
 
             // Save to DB
@@ -561,7 +607,6 @@
                 }
             }
             
-            // Clear current cart session
             cart = [];
             await db.draftCart.clear();
             renderCart();
@@ -741,13 +786,6 @@
             loadLogo();
             updateCustomerDropdown();
             updateLivePreview();
-            
-            // Automatic Connection attempt on start
-            if (localStorage.getItem('saved_printer_name')) {
-                 document.getElementById('printer-status').innerText = "Status: Reconnecting to " + localStorage.getItem('saved_printer_name');
-                 // Note: Modern browsers require a user gesture to connect Bluetooth.
-                 // This will trigger if the user has already paired once.
-            }
         }
         
         init();
