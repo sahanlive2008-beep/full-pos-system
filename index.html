@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="si">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -300,7 +300,47 @@
         }
 
         function closePngModal() { document.getElementById('png-modal').style.display = 'none'; }
-        async function finalPrintProcess() { closePngModal(); await preparePrint(); }
+
+        async function finalPrintProcess() {
+            const previewSlot = document.getElementById('png-preview-slot');
+            const imgElement = previewSlot.querySelector('img');
+            if (!imgElement) {
+                alert("Please wait for the image to generate.");
+                return;
+            }
+
+            // Logic to save sale data
+            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
+            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            const custName = document.getElementById('bill-customer').value;
+
+            await db.sales.add({
+                date: new Date().getTime(),
+                total: subtotal,
+                profit: profit,
+                customer: custName,
+                type: paymentMode,
+                items: JSON.parse(JSON.stringify(cart))
+            });
+
+            for(let i of cart) {
+                if(i.code) {
+                    const invItem = await db.inventory.get(i.code);
+                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
+                }
+            }
+
+            // FIX: Print PNG directly to a new window to prevent Kanji error
+            const pWin = window.open('', '_blank');
+            pWin.document.write(`<html><body style="margin:0;"><img src="${imgElement.src}" style="width:58mm;" onload="window.print();window.close();"></body></html>`);
+            pWin.document.close();
+
+            cart = []; 
+            await db.draftCart.clear(); 
+            renderCart(); 
+            updateLivePreview();
+            closePngModal();
+        }
 
         function handleLogoUpload(input) {
             const file = input.files[0];
@@ -416,7 +456,6 @@
             
             if(item) {
                 if(item.stock - qty < 10) { alert(`⚠️ Low Stock: ${item.name} is under 10!`); }
-                // FIX: Apply discount to line total only
                 const cartItem = {
                     ...item, 
                     qty: qty, 
@@ -490,61 +529,12 @@
                 </div>
             `}).join('');
 
-            // CHANGED: SUBTOTAL -> මුළු මුදල
             let totalHtml = `<p>මුළු මුදල: LKR ${subtotal.toFixed(2)}</p>`;
             if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
                 totalHtml += `<p class="font-bold">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
             }
             totalHtml += `<p>Payment: ${paymentMode.toUpperCase()}</p>`;
             document.getElementById('print-totals').innerHTML = totalHtml;
-        }
-
-        async function preparePrint() {
-            const custName = document.getElementById('bill-customer').value;
-            if(!custName) return alert("Please select a customer");
-
-            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            const cashGaveInput = prompt("ලැබූ මුදල (Amount Received):", subtotal) || "0";
-            const cashGave = parseFloat(cashGaveInput);
-            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
-            
-            let creditAmount = 0;
-            let balance = 0;
-            if (cashGave < subtotal) { creditAmount = subtotal - cashGave; } else { balance = cashGave - subtotal; }
-
-            updateLivePreview();
-            // CHANGED: SUBTOTAL -> මුළු මුදල
-            let totalHtml = `<p>මුළු මුදල: LKR ${subtotal.toFixed(2)}</p><p>මුදල: LKR ${cashGave.toFixed(2)}</p><p>ඉතිරි: LKR ${balance.toFixed(2)}</p>`;
-            if(creditAmount > 0) {
-                totalHtml += `<p style="color:red">ණය (Credit): LKR ${creditAmount.toFixed(2)}</p>`;
-                const c = await db.customers.get(custName);
-                await db.customers.update(custName, { creditAmount: (c.creditAmount || 0) + creditAmount, status: 'credit' });
-            }
-            document.getElementById('print-totals').innerHTML = totalHtml;
-
-            await db.sales.add({
-                date: new Date().getTime(), total: subtotal, profit: profit,
-                customer: custName, type: creditAmount > 0 ? 'credit' : 'cash', items: JSON.parse(JSON.stringify(cart))
-            });
-
-            for(let i of cart) {
-                if(i.code) {
-                    const invItem = await db.inventory.get(i.code);
-                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
-                }
-            }
-
-            window.print();
-
-            if(bleCharacteristic) {
-                try {
-                    let receiptText = document.getElementById('print-area').innerText;
-                    const encoder = new TextEncoder();
-                    await bleCharacteristic.writeValue(encoder.encode(receiptText + "\n\n\n"));
-                } catch(e) { console.log(e); }
-            }
-
-            cart = []; await db.draftCart.clear(); renderCart(); updateLivePreview();
         }
 
         async function saveCustomer() {
