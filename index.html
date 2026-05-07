@@ -11,10 +11,18 @@
     <style>
         <link rel="manifest" href="manifest.json">
         @media print {
-            /* Hides everything except the temporary print wrapper during printing */
-            body > *:not(#temp-print-wrap) { display: none !important; }
-            #temp-print-wrap { display: block !important; width: 58mm; margin: 0; padding: 0; }
-            #temp-print-wrap img { width: 100%; height: auto; display: block; }
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { 
+                position: absolute; 
+                left: 0; 
+                top: 0; 
+                width: 100%; 
+                max-width: 58mm; 
+                padding: 0; 
+                margin: 0; 
+                border: none; 
+            }
         }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
@@ -29,19 +37,6 @@
         #reader { width: 100% !important; min-height: 250px; background: #000; }
         #reader video { object-fit: cover !important; }
 
-        #png-modal { 
-            display: none; 
-            position: fixed; 
-            inset: 0; 
-            background: rgba(0,0,0,0.85); 
-            z-index: 200; 
-            align-items: center; 
-            justify-content: center; 
-            flex-direction: column; 
-            padding: 20px;
-        }
-        .modal-content { background: white; padding: 15px; border-radius: 12px; max-width: 100%; text-align: center; }
-        
         #print-area { 
             line-height: 1.6 !important; 
             padding: 10px !important; 
@@ -55,23 +50,9 @@
             padding: 6px;
             margin: 8px 0;
         }
-
-        /* Temporary wrapper for printing the image */
-        #temp-print-wrap { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 pb-24">
-
-    <div id="temp-print-wrap"></div>
-
-    <div id="png-modal">
-        <div class="modal-content">
-            <h3 class="font-bold mb-3">Confirm Receipt</h3>
-            <div id="png-preview-slot" class="flex justify-center mb-4 bg-gray-100 p-2 rounded"></div>
-            <button onclick="finalPrintProcess()" class="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg mb-2">✅ OK - PRINT NOW</button>
-            <button onclick="closePngModal()" class="w-full py-2 text-red-500 font-bold">Cancel</button>
-        </div>
-    </div>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black opacity-50 z-[70] hidden"></div>
     <nav id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-[80] shadow-xl p-4">
@@ -146,7 +127,7 @@
                         <span>Total (LKR):</span>
                         <span id="cart-total">0.00</span>
                     </div>
-                    <button onclick="generatePngInstead()" class="w-full bg-blue-600 text-white py-3 rounded mt-3 font-bold">FINISH & PRINT</button>
+                    <button onclick="directPrint()" class="w-full bg-blue-600 text-white py-3 rounded mt-3 font-bold">FINISH & PRINT</button>
                 </div>
             </div>
 
@@ -286,44 +267,14 @@
             alert("Saved printer forgotten.");
         }
 
-        // --- FIX: PRINTING PNG LOGIC (TO PREVENT KANJI) ---
-        async function generatePngInstead() {
+        async function directPrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
             if(cart.length === 0) return alert("Cart is empty");
-            
-            updateLivePreview(); 
-            const printArea = document.getElementById('print-area');
-            const previewSlot = document.getElementById('png-preview-slot');
-            
-            previewSlot.innerHTML = "<p class='animate-pulse'>Generating PNG Image...</p>";
-            document.getElementById('png-modal').style.display = 'flex';
-            
-            setTimeout(() => {
-                html2canvas(printArea, { scale: 3, backgroundColor: "#ffffff", logging: false }).then(canvas => {
-                    const img = new Image();
-                    img.src = canvas.toDataURL("image/png");
-                    img.className = "max-w-full h-auto border shadow";
-                    previewSlot.innerHTML = '';
-                    previewSlot.appendChild(img);
-                });
-            }, 100);
-        }
-
-        // IMPROVED PRINTING: Uses same-page printing to bypass mobile popup blockers
-        async function finalPrintProcess() {
-            const previewSlot = document.getElementById('png-preview-slot');
-            const imgElement = previewSlot.querySelector('img');
-            
-            if (!imgElement) {
-                alert("Image not ready. Please wait.");
-                return;
-            }
 
             // Save Transaction to Database
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
             const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
-            const custName = document.getElementById('bill-customer').value;
 
             await db.sales.add({
                 date: new Date().getTime(),
@@ -341,24 +292,15 @@
                 }
             }
 
-            // STABLE PRINTING LOGIC FOR MOBILE:
-            const printWrap = document.getElementById('temp-print-wrap');
-            printWrap.innerHTML = `<img src="${imgElement.src}">`;
-            
-            // Short delay to ensure image is rendered
-            setTimeout(() => {
-                window.print();
-                // Clear Cart and close modal after printing starts
-                cart = []; 
-                db.draftCart.clear(); 
-                renderCart(); 
-                updateLivePreview();
-                closePngModal();
-                printWrap.innerHTML = '';
-            }, 250);
-        }
+            // Trigger System Print
+            window.print();
 
-        function closePngModal() { document.getElementById('png-modal').style.display = 'none'; }
+            // Clear Cart after printing starts
+            cart = []; 
+            await db.draftCart.clear(); 
+            renderCart(); 
+            updateLivePreview();
+        }
 
         // --- SEARCH & CART LOGIC ---
         async function searchItems(query) {
