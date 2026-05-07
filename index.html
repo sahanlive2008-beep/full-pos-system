@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
     <style>
         <link rel="manifest" href="manifest.json">
         @media print {
@@ -216,6 +218,7 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
+        // --- Functions handleLogoUpload, loadLogo, removeLogo, searchItems, selectSearchResult, toggleSidebar, connectBluetooth, testPrint, showTab, saveNewItem, renderInventory, updateStock, updatePrice, checkItemCode, addToCart, addUnlistedItem remain exactly the same ---
         function handleLogoUpload(input) {
             const file = input.files[0];
             if (file) {
@@ -309,7 +312,6 @@
                     optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
                 });
                 
-                // Save Device ID for auto-reconnect
                 localStorage.setItem('saved_printer_id', bleDevice.id);
                 
                 const server = await bleDevice.gatt.connect();
@@ -474,6 +476,7 @@
             document.getElementById('print-totals').innerHTML = totalHtml;
         }
 
+        // --- UPDATED preparePrint to support PNG printing for Sinhala ---
         async function preparePrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
@@ -533,24 +536,17 @@
                 }
             }
 
-            // AUTO PRINT LOGIC
-            // 1. Show System Print Preview (Preserves All Languages/Sinhala)
+            // NEW: PNG Image Print for Language Fix
+            const printArea = document.getElementById('print-area');
+            const canvas = await html2canvas(printArea, { scale: 2, backgroundColor: "#ffffff" });
+            const base64Image = canvas.toDataURL("image/png").split(',')[1];
+            
+            // This sends the bill as a PNG Image to RawBT
+            window.location.href = "intent://base64," + base64Image + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.action=photo;end;";
+
+            // Standard System Print for record
             window.print();
 
-            // 2. Bluetooth Print (if connected)
-            if(bleCharacteristic) {
-                try {
-                    let receiptText = document.getElementById('print-area').innerText;
-                    const encoder = new TextEncoder();
-                    const data = encoder.encode(receiptText + "\n\n\n");
-                    await bleCharacteristic.writeValue(data);
-                } catch(e) { console.log("BT Print Failed", e); }
-            }
-
-            // 3. RawBT Intent Fallback
-            let receiptText = document.getElementById('print-area').innerText;
-            window.location.href = "intent://base64," + btoa(unescape(encodeURIComponent(receiptText))) + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
-            
             // Clear cart after printing
             cart = [];
             await db.draftCart.clear();
@@ -558,6 +554,7 @@
             updateLivePreview();
         }
 
+        // Functions saveCustomer, settleCredit, renderCustomers, toggleCustStatus, updateCustomerDropdown, startScanner, stopScanner, setReportFilter, calculateReports, viewBillDetails, init remain the same
         async function saveCustomer() {
             const name = document.getElementById('cust-name').value;
             if(!name) return alert("Name is required");
@@ -711,12 +708,7 @@
             loadLogo();
             updateCustomerDropdown();
             updateLivePreview();
-            
-            // Check for saved printer
             const savedId = localStorage.getItem('saved_printer_id');
-            if(savedId) {
-                console.log("Found saved printer. Click 'Connect' to re-authorize if needed.");
-            }
         }
         
         init();
