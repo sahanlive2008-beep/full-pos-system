@@ -9,6 +9,7 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
+        <link rel="manifest" href="manifest.json">
         @media print {
             body * { visibility: hidden; }
             #print-area, #print-area * { visibility: visible; }
@@ -18,20 +19,20 @@
         .tab-content.active { display: block; }
         .receipt-border { border: 2px solid black; border-radius: 10px; padding: 5px; margin-bottom: 5px; }
         #live-preview-container { border: 2px dashed #3b82f6; background: white; margin-top: 20px; padding: 10px; }
+        
         #sidebar { transition: transform 0.3s ease-in-out; transform: translateX(-100%); }
         #sidebar.open { transform: translateX(0); }
         .search-results { max-height: 200px; overflow-y: auto; border: 1px solid #ddd; display: none; }
         .search-results div { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; }
         .search-results div:hover { background-color: #f3f4f6; }
+        
         #receipt-logo { max-width: 100%; height: auto; margin-bottom: 5px; display: none; }
+        
         #reader { width: 100% !important; min-height: 250px; background: #000; }
         #reader video { object-fit: cover !important; }
-        /* Hidden iframe for silent printing */
-        #print-frame { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 pb-24">
-    <iframe id="print-frame"></iframe>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black opacity-50 z-[70] hidden"></div>
     <nav id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-[80] shadow-xl p-4">
@@ -178,11 +179,13 @@
         <div id="tab-reports" class="tab-content">
             <div class="bg-white p-4 rounded shadow mb-4">
                 <h2 class="font-bold mb-3 underline text-blue-800">Business Reports</h2>
+                
                 <div class="flex gap-2 mb-4">
                     <button onclick="setReportFilter('day')" id="filter-day" class="flex-1 bg-blue-600 text-white py-2 rounded text-xs font-bold uppercase">Daily</button>
                     <button onclick="setReportFilter('week')" id="filter-week" class="flex-1 bg-blue-100 text-blue-800 py-2 rounded text-xs font-bold uppercase">Weekly</button>
                     <button onclick="setReportFilter('month')" id="filter-month" class="flex-1 bg-blue-100 text-blue-800 py-2 rounded text-xs font-bold uppercase">Monthly</button>
                 </div>
+                
                 <div class="grid grid-cols-2 gap-3 mb-6">
                     <div class="bg-green-100 p-3 rounded border border-green-200">
                         <p class="text-[10px] uppercase font-bold text-green-700">Total Profit</p>
@@ -193,12 +196,14 @@
                         <h1 id="rep-sales" class="text-xl font-bold">LKR 0.00</h1>
                     </div>
                 </div>
+
                 <div class="border-t pt-4">
                     <h3 class="font-bold text-sm mb-3 flex justify-between">
                         <span>Invoice History (All Bills)</span>
                         <span class="text-[10px] text-gray-400">Click to view items</span>
                     </h3>
-                    <div id="bill-history-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
+                    <div id="bill-history-list" class="space-y-2 max-h-80 overflow-y-auto">
+                        </div>
                 </div>
             </div>
         </div>
@@ -219,7 +224,6 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
-        // Logic for Search, Sidebar, and Tabs remains same...
         function handleLogoUpload(input) {
             const file = input.files[0];
             if (file) {
@@ -312,13 +316,28 @@
                     filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, { namePrefix: 'RP' }, { namePrefix: 'MTP' }],
                     optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
                 });
-                localStorage.setItem('saved_printer_id', bleDevice.id);
+
+                // Auto-reconnection logic: Save the device name/info
+                localStorage.setItem('saved_printer_name', bleDevice.name);
+                
                 const server = await bleDevice.gatt.connect();
                 const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
                 bleCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
                 status.innerText = "Status: Connected to " + bleDevice.name;
+                
+                // Add event listener to handle disconnection
+                bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                
             } catch (err) {
                 status.innerText = "Error: " + err.message;
+            }
+        }
+
+        function onDisconnected() {
+            document.getElementById('printer-status').innerText = "Status: Disconnected. Reconnecting...";
+            // Attempt auto-reconnect if it was previously saved
+            if (localStorage.getItem('saved_printer_name')) {
+                setTimeout(connectBluetooth, 3000);
             }
         }
 
@@ -475,29 +494,57 @@
             document.getElementById('print-totals').innerHTML = totalHtml;
         }
 
-        // --- UPDATED PREPAREPRINT WITH PNG CONVERSION ---
         async function preparePrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
 
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            const cashGaveInput = prompt("ලැබූ මුදල (Amount Received):", subtotal) || "0";
+            const cashGaveInput = prompt("ලැබූ මුදල (Amount Received):") || "0";
             const cashGave = parseFloat(cashGaveInput);
             const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            const totalDiscount = cart.reduce((sum, i) => sum + i.discount, 0);
             
-            let creditAmount = Math.max(0, subtotal - cashGave);
-            let balance = Math.max(0, cashGave - subtotal);
+            let creditAmount = 0;
+            let balance = 0;
 
-            // Final Update UI
+            if (cashGave < subtotal) {
+                creditAmount = subtotal - cashGave;
+            } else {
+                balance = cashGave - subtotal;
+            }
+
+            updateLivePreview();
+
             let totalHtml = `
                 <p>SUBTOTAL: LKR ${subtotal.toFixed(2)}</p>
                 <p>මුදල: LKR ${cashGave.toFixed(2)}</p>
                 <p>ඉතිරි: LKR ${balance.toFixed(2)}</p>
             `;
-            if(creditAmount > 0) totalHtml += `<p style="color:red; font-weight:bold">ණය (Credit): LKR ${creditAmount.toFixed(2)}</p>`;
+            
+            if(creditAmount > 0) {
+                totalHtml += `<p class="font-bold" style="color:red">ණය (Credit): LKR ${creditAmount.toFixed(2)}</p>`;
+                const c = await db.customers.get(custName);
+                await db.customers.update(custName, { 
+                    creditAmount: (c.creditAmount || 0) + creditAmount, 
+                    status: 'credit'
+                });
+            }
+
+            if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
+                totalHtml += `<p class="font-bold">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
+            }
+
             document.getElementById('print-totals').innerHTML = totalHtml;
 
-            // Database Save
+            // --- PNG CONVERSION & RAWBT PRINTING ---
+            const printArea = document.getElementById('print-area');
+            html2canvas(printArea, { scale: 3 }).then(async (canvas) => {
+                const base64Image = canvas.toDataURL("image/png").split(',')[1];
+                // Sending image to RawBT app using Intent
+                window.location.href = "intent://base64," + base64Image + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+            });
+
+            // Save to DB
             await db.sales.add({
                 date: new Date().getTime(),
                 total: subtotal,
@@ -507,50 +554,17 @@
                 items: JSON.parse(JSON.stringify(cart))
             });
 
-            // Update Stock
             for(let i of cart) {
                 if(i.code) {
                     const invItem = await db.inventory.get(i.code);
                     if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
                 }
             }
-
-            // PNG GENERATION & SILENT PRINT
-            const printArea = document.getElementById('print-area');
-            html2canvas(printArea, { scale: 3 }).then(async canvas => {
-                const imgData = canvas.toDataURL('image/png');
-                
-                // Silent Printing via Hidden Iframe
-                const pFrame = document.getElementById('print-frame');
-                const pDoc = pFrame.contentWindow.document;
-                pDoc.open();
-                pDoc.write(`<html><body style="margin:0;"><img src="${imgData}" style="width:100%;"></body></html>`);
-                pDoc.close();
-                
-                setTimeout(() => {
-                    pFrame.contentWindow.focus();
-                    pFrame.contentWindow.print();
-                }, 500);
-
-                // Bluetooth Fallback
-                if(bleCharacteristic) {
-                    try {
-                        const encoder = new TextEncoder();
-                        const data = encoder.encode(printArea.innerText + "\n\n\n");
-                        await bleCharacteristic.writeValue(data);
-                    } catch(e) { console.log("BT Failed", e); }
-                }
-
-                // RawBT Intent Fallback
-                const base64Clean = imgData.split(',')[1];
-                window.location.href = "intent://base64," + base64Clean + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
-
-                // Clear Cart
-                cart = [];
-                await db.draftCart.clear();
-                renderCart();
-                updateLivePreview();
-            });
+            
+            // Clear current cart session
+            cart = [];
+            await db.draftCart.clear();
+            renderCart();
         }
 
         async function saveCustomer() {
@@ -616,19 +630,30 @@
         async function startScanner() {
             document.getElementById('scanner-container').classList.remove('hidden');
             html5QrCode = new Html5Qrcode("reader");
-            const qrConfig = { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.0 };
+            
+            const qrConfig = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 150 },
+                aspectRatio: 1.0
+            };
+
             try {
-                await html5QrCode.start({ facingMode: "environment" }, qrConfig, async (decodedText) => {
-                    const item = await db.inventory.get(decodedText);
-                    if(item) {
-                        stopScanner();
-                        selectSearchResult(item.code, item.name);
-                    } else {
-                        alert("අයිතමය හමු නොවීය (Item not found): " + decodedText);
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    qrConfig,
+                    async (decodedText) => {
+                        const item = await db.inventory.get(decodedText);
+                        if(item) {
+                            stopScanner();
+                            selectSearchResult(item.code, item.name);
+                        } else {
+                            alert("අයිතමය හමු නොවීය (Item not found): " + decodedText);
+                        }
                     }
-                });
+                );
             } catch (err) {
-                alert("කැමරාව ක්‍රියාත්මක කළ නොහැක. Please check permissions.");
+                console.error("Camera access error:", err);
+                alert("කැමරාව ක්‍රියාත්මක කළ නොහැක (Camera access failed). Please check permissions.");
                 stopScanner();
             }
         }
@@ -664,11 +689,17 @@
         async function calculateReports() {
             const now = new Date();
             let startTime;
-            if (currentFilter === 'day') { startTime = new Date().setHours(0,0,0,0); }
-            else if (currentFilter === 'week') { startTime = now.setDate(now.getDate() - 7); }
-            else { startTime = now.setMonth(now.getMonth() - 1); }
+
+            if (currentFilter === 'day') {
+                startTime = new Date().setHours(0,0,0,0);
+            } else if (currentFilter === 'week') {
+                startTime = now.setDate(now.getDate() - 7);
+            } else {
+                startTime = now.setMonth(now.getMonth() - 1);
+            }
 
             const sales = await db.sales.filter(s => s.date >= startTime).toArray();
+            
             const totalProfit = sales.reduce((s, a) => s + a.profit, 0);
             const totalSales = sales.reduce((s, a) => s + a.total, 0);
 
@@ -693,8 +724,12 @@
         async function viewBillDetails(id) {
             const sale = await db.sales.get(id);
             if (!sale || !sale.items) return;
-            let itemDetails = sale.items.map(i => `• ${i.name} (${i.qty}) = LKR ${i.total.toFixed(2)}`).join('\n');
-            alert(`INVOICE DETAILS\nCustomer: ${sale.customer}\nType: ${sale.type.toUpperCase()}\n\nItems:\n${itemDetails}\n\nTotal: LKR ${sale.total.toFixed(2)}`);
+
+            let itemDetails = sale.items.map(i => 
+                `• ${i.name} (${i.qty}) = LKR ${i.total.toFixed(2)}`
+            ).join('\n');
+
+            alert(`INVOICE DETAILS\n------------------\nCustomer: ${sale.customer}\nType: ${sale.type.toUpperCase()}\nDate: ${new Date(sale.date).toLocaleString()}\n\nItems:\n${itemDetails}\n\nTotal Sale: LKR ${sale.total.toFixed(2)}\nProfit from Bill: LKR ${sale.profit.toFixed(2)}`);
         }
 
         async function init() {
@@ -706,6 +741,13 @@
             loadLogo();
             updateCustomerDropdown();
             updateLivePreview();
+            
+            // Automatic Connection attempt on start
+            if (localStorage.getItem('saved_printer_name')) {
+                 document.getElementById('printer-status').innerText = "Status: Reconnecting to " + localStorage.getItem('saved_printer_name');
+                 // Note: Modern browsers require a user gesture to connect Bluetooth.
+                 // This will trigger if the user has already paired once.
+            }
         }
         
         init();
