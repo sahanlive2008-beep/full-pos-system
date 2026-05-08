@@ -292,44 +292,53 @@
             }
 
             const printContent = document.getElementById('print-area').innerHTML;
-            const printWindow = window.open('', '', 'width=450,height=600');
+            const printWindow = window.open('', '_blank', 'width=450,height=600');
             
-            // ERROR FIX: Ensure window write happens correctly
-            printWindow.document.open();
-            printWindow.document.write(`
-                <html>
-                <head>
-                    <title>Bill Preview</title>
-                    <style>
-                        body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; font-size: 11px; text-align: center; background: #eee; }
-                        #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
-                        .print-btn { 
-                            width: 100%; background: #2563eb; color: white; border: none; 
-                            padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px;
-                            cursor: pointer; font-size: 16px;
-                        }
-                        .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
-                        #items-square-container { border: 1.5px solid black; border-radius: 8px; padding: 5px; margin: 5px 0; }
-                        .flex { display: flex; }
-                        .justify-between { justify-content: space-between; }
-                        .text-right { text-align: right; }
-                        img { max-width: 100%; height: auto; margin-bottom: 5px; display: block; margin-left: auto; margin-right: auto; }
-                        @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }
-                    </style>
-                </head>
-                <body>
-                    <button class="print-btn" onclick="window.print(); window.close();">PRINT BILL NOW</button>
-                    <div id="bill-wrap">
-                        ${printContent}
-                    </div>
-                    <script>
-                        // Auto-focus the print button
-                        window.onload = function() { window.focus(); };
-                    <\/script>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
+            // FIX: Modern browsers require a specific flow to avoid errors
+            if (printWindow) {
+                printWindow.document.open();
+                printWindow.document.write(`
+                    <html>
+                    <head>
+                        <title>Bill Preview</title>
+                        <style>
+                            body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; font-size: 11px; text-align: center; background: #eee; }
+                            #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+                            .print-btn { 
+                                width: 100%; background: #2563eb; color: white; border: none; 
+                                padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px;
+                                cursor: pointer; font-size: 16px;
+                            }
+                            .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
+                            #items-square-container { border: 1.5px solid black; border-radius: 8px; padding: 5px; margin: 5px 0; }
+                            .flex { display: flex; }
+                            .justify-between { justify-content: space-between; }
+                            .text-right { text-align: right; }
+                            img { max-width: 100%; height: auto; margin-bottom: 5px; display: block; margin-left: auto; margin-right: auto; }
+                            @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }
+                        </style>
+                    </head>
+                    <body>
+                        <button class="print-btn" onclick="window.print();">PRINT BILL NOW</button>
+                        <div id="bill-wrap">
+                            ${printContent}
+                        </div>
+                        <script>
+                            window.onload = function() {
+                                setTimeout(function() { 
+                                    // Optional: Auto-trigger print if desired
+                                    // window.print(); 
+                                }, 500);
+                            };
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
+                printWindow.focus();
+            } else {
+                alert("Please allow popups for printing to work.");
+            }
 
             // Clear Cart
             cart = []; 
