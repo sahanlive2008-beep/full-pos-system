@@ -24,7 +24,7 @@
                 border: none; 
             }
 
-            /* --- SYNCED PRINT TEXT SIZES --- */
+            /* --- PRINT TEXT SIZES --- */
             .print-shop-name { font-size: 20px !important; font-weight: bold; }
             .print-shop-info { font-size: 14px !important; }
             .print-bill-details { font-size: 14px !important; }
@@ -32,16 +32,17 @@
             .print-item-name { font-size: 18px !important; font-weight: bold; }
             .print-item-details { font-size: 14px !important; }
             
-            /* FIXED: TOTAL SECTION STABILITY */
+            /* FIXED: TOTAL SECTION STABILITY FIX */
             .print-total-section { 
-                font-size: 15px !important; 
-                font-weight: italic; 
+                font-size: 20px !important; 
+                font-weight: bold; 
                 border-top: 2px solid black; 
-                padding-top: 8px; 
+                padding-top: 5px; 
                 margin-top: 10px; 
-                clear: both; 
-                width: 100%; 
-                display: block; 
+                clear: both !important; 
+                width: 100% !important; 
+                display: block !important;
+                overflow: auto;
             }
             
             .print-footer-info { font-size: 14px !important; }
@@ -76,6 +77,7 @@
             padding: 8px 0;
             margin: 10px 0;
             min-height: 20px;
+            clear: both;
         }
 
         #temp-print-wrap { display: none; }
@@ -268,7 +270,6 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
-        // PRINTER & LOGO FUNCTIONS
         async function connectAndSaveBluetooth() {
             const status = document.getElementById('printer-status');
             try {
@@ -291,7 +292,6 @@
             alert("Saved printer forgotten.");
         }
 
-        // --- CORE PRINT FUNCTION (STABLE VERSION) ---
         async function directPrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
@@ -312,7 +312,7 @@
             const itemsHtml = cart.map(i => {
                 const unitPriceAfterDiscount = i.total / i.qty;
                 return `
-                <div style="margin-bottom: 8px; padding-bottom: 4px;">
+                <div style="margin-bottom: 8px; padding-bottom: 4px; clear: both;">
                     <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
                     <div class="flex justify-between print-item-details">
                         <span style="width:15%">${i.qty}</span>
@@ -381,7 +381,6 @@
                 <div class="text-right mt-1">${footerHtml}</div>
             `;
 
-            // DB Record and Stock Update
             await db.sales.add({
                 date: new Date().getTime(),
                 total: subtotal,
@@ -411,19 +410,18 @@
                             #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
                             .print-btn { width: 100%; background: #2563eb; color: white; border: none; padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px; cursor: pointer; font-size: 16px; }
                             .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
-                            #items-square-container { border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 5px 0; margin: 5px 0; min-height: 20px; }
+                            #items-square-container { border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 5px 0; margin: 5px 0; min-height: 20px; clear: both; }
                             .flex { display: flex; }
                             .justify-between { justify-content: space-between; }
                             .text-right { text-align: right; }
                             
-                            /* SYNCED CLASSES */
                             .print-shop-name { font-size: 20px !important; font-weight: bold; margin: 0; }
                             .print-shop-info { font-size: 14px !important; margin: 0; }
                             .print-bill-details { font-size: 14px !important; }
                             .print-table-head { font-size: 15px !important; font-weight: bold; }
                             .print-item-name { font-size: 18px !important; font-weight: bold; margin: 0; }
                             .print-item-details { font-size: 14px !important; }
-                            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both; width: 100%; display: block; }
+                            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both !important; width: 100%; display: block; overflow: auto; }
                             .print-footer-info { font-size: 14px !important; }
                             .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
 
@@ -447,7 +445,6 @@
             alert("Sale Completed!");
         }
 
-        // OTHER POS LOGIC (Search, Cart, Stock, Tabs)
         async function searchItems(query) {
             const resultsDiv = document.getElementById('search-results');
             let items;
@@ -543,7 +540,7 @@
             document.getElementById('print-items').innerHTML = cart.map(i => {
                 const unitPriceAfterDiscount = i.total / i.qty;
                 return `
-                <div style="margin-bottom: 8px; padding-bottom: 4px;">
+                <div style="margin-bottom: 8px; padding-bottom: 4px; clear: both;">
                     <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
                     <div class="flex justify-between print-item-details">
                         <span style="width:15%">${i.qty}</span>
@@ -588,7 +585,6 @@
             updateLivePreview();
         }
 
-        // SYSTEM FUNCTIONS
         function handleLogoUpload(input) {
             const file = input.files[0];
             if (file) {
