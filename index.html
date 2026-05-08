@@ -24,17 +24,28 @@
                 border: none; 
             }
 
-            /* --- CUSTOMIZABLE PRINT TEXT SIZES FOR LIVE PREVIEW --- */
+            /* --- SYNCED PRINT TEXT SIZES --- */
             .print-shop-name { font-size: 20px !important; font-weight: bold; }
             .print-shop-info { font-size: 14px !important; }
             .print-bill-details { font-size: 14px !important; }
             .print-table-head { font-size: 15px !important; font-weight: bold; }
             .print-item-name { font-size: 18px !important; font-weight: bold; }
-            .print-item-details { font-size: 50px !important; }
-            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both; width: 100%; display: block; }
+            .print-item-details { font-size: 14px !important; }
+            
+            /* FIXED: TOTAL SECTION STABILITY */
+            .print-total-section { 
+                font-size: 20px !important; 
+                font-weight: bold; 
+                border-top: 2px solid black; 
+                padding-top: 5px; 
+                margin-top: 10px; 
+                clear: both; 
+                width: 100%; 
+                display: block; 
+            }
+            
             .print-footer-info { font-size: 14px !important; }
             .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
-            /* -------------------------------------- */
 
             @page { size: auto; margin: 0; }
         }
@@ -64,6 +75,7 @@
             border-bottom: 1.5px solid black;
             padding: 8px 0;
             margin: 10px 0;
+            min-height: 20px;
         }
 
         #temp-print-wrap { display: none; }
@@ -256,6 +268,7 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
+        // PRINTER & LOGO FUNCTIONS
         async function connectAndSaveBluetooth() {
             const status = document.getElementById('printer-status');
             try {
@@ -278,6 +291,7 @@
             alert("Saved printer forgotten.");
         }
 
+        // --- CORE PRINT FUNCTION (STABLE VERSION) ---
         async function directPrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
@@ -367,6 +381,7 @@
                 <div class="text-right mt-1">${footerHtml}</div>
             `;
 
+            // DB Record and Stock Update
             await db.sales.add({
                 date: new Date().getTime(),
                 total: subtotal,
@@ -401,7 +416,7 @@
                             .justify-between { justify-content: space-between; }
                             .text-right { text-align: right; }
                             
-                            /* --- SYNCED CUSTOMIZABLE CLASSES --- */
+                            /* SYNCED CLASSES */
                             .print-shop-name { font-size: 20px !important; font-weight: bold; margin: 0; }
                             .print-shop-info { font-size: 14px !important; margin: 0; }
                             .print-bill-details { font-size: 14px !important; }
@@ -432,6 +447,7 @@
             alert("Sale Completed!");
         }
 
+        // OTHER POS LOGIC (Search, Cart, Stock, Tabs)
         async function searchItems(query) {
             const resultsDiv = document.getElementById('search-results');
             let items;
@@ -572,6 +588,7 @@
             updateLivePreview();
         }
 
+        // SYSTEM FUNCTIONS
         function handleLogoUpload(input) {
             const file = input.files[0];
             if (file) {
