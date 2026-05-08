@@ -23,6 +23,19 @@
                 margin: 0; 
                 border: none; 
             }
+
+            /* --- CUSTOMIZABLE PRINT TEXT SIZES FOR LIVE PREVIEW --- */
+            .print-shop-name { font-size: 20px !important; font-weight: bold; }
+            .print-shop-info { font-size: 14px !important; }
+            .print-bill-details { font-size: 14px !important; }
+            .print-table-head { font-size: 15px !important; font-weight: bold; }
+            .print-item-name { font-size: 18px !important; font-weight: bold; }
+            .print-item-details { font-size: 50px !important; }
+            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both; width: 100%; display: block; }
+            .print-footer-info { font-size: 14px !important; }
+            .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
+            /* -------------------------------------- */
+
             @page { size: auto; margin: 0; }
         }
 
@@ -46,7 +59,6 @@
             overflow: visible !important;
         }
 
-        /* Updated for professional bill style: horizontal separators instead of a box */
         #items-square-container {
             border-top: 1.5px solid black;
             border-bottom: 1.5px solid black;
@@ -143,15 +155,15 @@
                 <div id="print-area" class="text-black bg-white p-2 mx-auto" style="font-size: 15px; font-family: 'Courier New', Courier, monospace; width: 58mm; border: 1px solid #ccc;">
                     <div class="receipt-border text-center">
                         <img id="receipt-logo" src="" alt="Logo">
-                        <p class="font-bold text-sm">පියරත්න ස්ටෝර්ස්</p>
-                        <p>දාගම-මාඑළිය</p>
-                        <p>075 4990060</p>
-                        <p>ග්‍රොසරි & හාර්ඩ්වෙයාර්</p>
-                        <p>අඩුම මිලට ඔබේම තැන</p>
+                        <p class="print-shop-name">පියරත්න ස්ටෝර්ස්</p>
+                        <p class="print-shop-info">දාගම-මාඑළිය</p>
+                        <p class="print-shop-info">075 4990060</p>
+                        <p class="print-shop-info">ග්‍රොසරි & හාර්ඩ්වෙයාර්</p>
+                        <p class="print-shop-info">අඩුම මිලට ඔබේම තැන</p>
                     </div>
 
                     <div id="items-square-container">
-                        <div class="flex justify-between mb-1 font-bold" style="font-size:15px; border-bottom: 1px solid black;">
+                        <div class="flex justify-between mb-1 print-table-head" style="border-bottom: 1px solid black;">
                             <span style="width:10%">ප්‍රමා.</span>
                             <span style="width:15%">සි/මිල</span>
                             <span style="width:15%">අපේ මිල</span>
@@ -161,7 +173,7 @@
                     </div>
 
                     <div id="print-totals" class="text-right mt-1"></div>
-                    <div class="text-center mt-2" style="font-size: 15px; font-weight: bold;">ස්තූතියි නැවත එන්න!</div>
+                    <div class="text-center mt-2 print-thanks-msg">ස්තූතියි නැවත එන්න!</div>
                 </div>
             </div>
         </div>
@@ -274,20 +286,21 @@
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
             const discountProfit = cart.reduce((sum, i) => sum + (i.discount || 0), 0);
             
-            // Ask for Gave Price
             const gavePriceInput = prompt("ලබාදුන් මුදල (Gave Price):", subtotal);
             if(gavePriceInput === null) return;
             const gavePrice = parseFloat(gavePriceInput) || 0;
             const balance = gavePrice - subtotal;
-            const invoiceNo = "INV-" + Date.now().toString().slice(-6);
 
-            // Update receipt content with new fields
+            const lastSale = await db.sales.orderBy('id').last();
+            const nextId = lastSale ? (lastSale.id + 1) : 1;
+            const invoiceNo = nextId.toString().padStart(3, '0');
+
             const itemsHtml = cart.map(i => {
                 const unitPriceAfterDiscount = i.total / i.qty;
                 return `
                 <div style="margin-bottom: 8px; padding-bottom: 4px;">
-                    <div style="font-weight:bold; font-size: 18px; text-transform: uppercase;">${i.name}</div>
-                    <div class="flex justify-between" style="font-size: 12px;">
+                    <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
+                    <div class="flex justify-between print-item-details">
                         <span style="width:15%">${i.qty}</span>
                         <span style="width:25%">${i.price.toFixed(2)}</span>
                         <span style="width:13%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
@@ -297,15 +310,15 @@
             }).join('');
 
             let footerHtml = `
-                <div style="margin-top: 5px; padding-top: 5px; font-size: 18px; border-top: 2px solid black;">
+                <div class="print-total-section">
                     <div class="flex justify-between" style="height: 25px; align-items: center;">
-                        <b>මුළු මුදල:</b> <b>රු. ${subtotal.toFixed(2)}</b>
+                        <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
                     </div>
                 </div>
-                <div class="flex justify-between" style="font-size: 14px; margin-top:5px;">
+                <div class="flex justify-between print-footer-info" style="margin-top:5px; clear: both;">
                     <span>ලබාදුන් මුදල:</span> <span>රු. ${gavePrice.toFixed(2)}</span>
                 </div>
-                <div class="flex justify-between" style="font-size: 14px; margin-bottom:5px;">
+                <div class="flex justify-between print-footer-info" style="margin-bottom:5px;">
                     <span>ඉතිරි මුදල:</span> <span>රු. ${balance.toFixed(2)}</span>
                 </div>
             `;
@@ -313,17 +326,17 @@
             if(discountProfit > 0 && paymentMode !== 'credit') {
               footerHtml += `
                 <div style="text-align: center; margin: 15px 0; clear: both;">
-                    <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 17px;">
+                    <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 17px !important;">
                         ඔබ ලැබූ ලාභය: රු. ${discountProfit.toFixed(2)}
                     </div>
                 </div>`;
             }
 
             footerHtml += `
-                <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px;">
-                    <p style="font-size: 11px; margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
-                    <p style="font-size: 10px; color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
-                    <div style="font-size: 15px; font-weight: bold; margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
+                <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px; clear: both;">
+                    <p class="print-footer-info" style="margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
+                    <p class="print-footer-info" style="color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
+                    <div class="print-thanks-msg" style="margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             `;
 
@@ -333,17 +346,17 @@
             const printContent = `
                 <div class="receipt-border text-center">
                     ${logoHtml}
-                    <p class="font-bold text-sm">පියරත්න ස්ටෝර්ස්</p>
-                    <p>දාගම-මාඑළිය</p>
-                    <p>075 4990060</p>
-                    <p>ග්‍රොසරි & හාර්ඩ්වෙයාර්</p>
-                    <p>අඩුම මිලට ඔබේම තැන</p>
+                    <p class="print-shop-name">පියරත්න ස්ටෝර්ස්</p>
+                    <p class="print-shop-info">දාගම-මාඑළිය</p>
+                    <p class="print-shop-info">075 4990060</p>
+                    <p class="print-shop-info">ග්‍රොසරි & හාර්ඩ්වෙයාර්</p>
+                    <p class="print-shop-info">අඩුම මිලට ඔබේම තැන</p>
                 </div>
-                <div style="font-size: 12px; margin-bottom: 5px;">
+                <div class="print-bill-details" style="margin-bottom: 5px;">
                     <div class="flex justify-between"><span>Inv: ${invoiceNo}</span><span>Customer: ${custName}</span></div>
                 </div>
                 <div id="items-square-container">
-                    <div class="flex justify-between mb-1 font-bold" style="font-size:15px; border-bottom: 1px solid black;">
+                    <div class="flex justify-between mb-1 print-table-head" style="border-bottom: 1px solid black;">
                         <span style="width:10%">ප්‍රමා.</span>
                         <span style="width:15%">සි/මිල</span>
                         <span style="width:15%">අපේ මිල</span>
@@ -354,7 +367,6 @@
                 <div class="text-right mt-1">${footerHtml}</div>
             `;
 
-            // Save to DB
             await db.sales.add({
                 date: new Date().getTime(),
                 total: subtotal,
@@ -365,7 +377,6 @@
                 items: JSON.parse(JSON.stringify(cart))
             });
 
-            // Update Stock
             for(let i of cart) {
                 if(i.code && i.code !== 'unlisted') {
                     const invItem = await db.inventory.get(i.code);
@@ -381,14 +392,26 @@
                     <head>
                         <title>Bill Preview</title>
                         <style>
-                            body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; font-size: 11px; text-align: center; background: #eee; }
+                            body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; text-align: center; background: #eee; }
                             #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
                             .print-btn { width: 100%; background: #2563eb; color: white; border: none; padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px; cursor: pointer; font-size: 16px; }
                             .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
-                            #items-square-container { border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 5px 0; margin: 5px 0; }
+                            #items-square-container { border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 5px 0; margin: 5px 0; min-height: 20px; }
                             .flex { display: flex; }
                             .justify-between { justify-content: space-between; }
                             .text-right { text-align: right; }
+                            
+                            /* --- SYNCED CUSTOMIZABLE CLASSES --- */
+                            .print-shop-name { font-size: 20px !important; font-weight: bold; margin: 0; }
+                            .print-shop-info { font-size: 14px !important; margin: 0; }
+                            .print-bill-details { font-size: 14px !important; }
+                            .print-table-head { font-size: 15px !important; font-weight: bold; }
+                            .print-item-name { font-size: 18px !important; font-weight: bold; margin: 0; }
+                            .print-item-details { font-size: 14px !important; }
+                            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both; width: 100%; display: block; }
+                            .print-footer-info { font-size: 14px !important; }
+                            .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
+
                             @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }
                         </style>
                     </head>
@@ -505,8 +528,8 @@
                 const unitPriceAfterDiscount = i.total / i.qty;
                 return `
                 <div style="margin-bottom: 8px; padding-bottom: 4px;">
-                    <div style="font-weight:bold; font-size: 18px; text-transform: uppercase;">${i.name}</div>
-                    <div class="flex justify-between" style="font-size: 16px;">
+                    <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
+                    <div class="flex justify-between print-item-details">
                         <span style="width:15%">${i.qty}</span>
                         <span style="width:25%">${i.price.toFixed(2)}</span>
                         <span style="width:13%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
@@ -516,9 +539,9 @@
             `}).join('');
 
             let totalHtml = `
-                <div style="margin-top: 5px; padding-top: 5px; font-size: 18px; border-top: 2px solid black;">
+                <div class="print-total-section">
                     <div class="flex justify-between" style="height: 25px; align-items: center;">
-                        <b>මුළු මුදල:</b> <b>රු. ${subtotal.toFixed(2)}</b>
+                        <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
                     </div>
                 </div>
             `;
@@ -533,10 +556,10 @@
             }
 
             totalHtml += `
-                <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px;">
-                    <p style="font-size: 18px; margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
-                    <p style="font-size: 18px; color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
-                    <div style="font-size: 15px; font-weight: bold; margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
+                <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px; clear: both;">
+                    <p class="print-footer-info" style="margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
+                    <p class="print-footer-info" style="color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
+                    <div class="print-thanks-msg" style="margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             `;
             document.getElementById('print-totals').innerHTML = totalHtml;
