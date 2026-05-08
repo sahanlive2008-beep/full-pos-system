@@ -46,7 +46,7 @@
             overflow: visible !important;
         }
 
-        /* Professional bill style: horizontal separators */
+        /* Updated for professional bill style: horizontal separators instead of a box */
         #items-square-container {
             border-top: 1.5px solid black;
             border-bottom: 1.5px solid black;
@@ -272,13 +272,14 @@
             if(cart.length === 0) return alert("Cart is empty");
 
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            // Profit calculated strictly from the discounts applied on the billing page
+            const discountProfit = cart.reduce((sum, i) => sum + (i.discount || 0), 0);
 
             // Save to DB
             await db.sales.add({
                 date: new Date().getTime(),
                 total: subtotal,
-                profit: profit,
+                profit: discountProfit,
                 customer: custName,
                 type: paymentMode,
                 items: JSON.parse(JSON.stringify(cart))
@@ -427,9 +428,11 @@
             document.getElementById('cart-total').innerText = total.toFixed(2);
         }
 
+        /* Logic updated to fix profit display and stabilize layout rows */
         function updateLivePreview() {
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
-            const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
+            // Profit section updated: Only shows the total discount given on the billing page
+            const discountProfit = cart.reduce((sum, i) => sum + (i.discount || 0), 0);
             const totalDiscount = cart.reduce((sum, i) => sum + i.discount, 0);
             
             document.getElementById('print-items').innerHTML = cart.map(i => {
@@ -446,19 +449,22 @@
                 </div>
             `}).join('');
 
-            // Professional Total Section
+            // Stable Totals Section
             let totalHtml = `
-                <div style="margin-top: 5px; padding-top: 5px; font-size: 18px;">
-                    <div class="flex justify-between"><b>මුළු මුදල:</b> <b>රු. ${subtotal.toFixed(2)}</b></div>
+                <div style="margin-top: 5px; padding-top: 5px; font-size: 18px; border-top: 2px solid black;">
+                    <div class="flex justify-between" style="height: 25px; align-items: center;">
+                        <b>මුළු මුදල:</b> 
+                        <b>රු. ${subtotal.toFixed(2)}</b>
+                    </div>
                 </div>
             `;
 
-            // Profit section inside a centered square box
-            if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
+            // Profit Section inside a Centered Square - Now showing only the discount total from bill page
+            if(discountProfit > 0 && paymentMode !== 'credit') {
               totalHtml += `
-                <div style="text-align: center; margin: 15px 0;">
+                <div style="text-align: center; margin: 15px 0; clear: both;">
                     <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 17px;">
-                        ඔබ ලැබූ ලාභය: රු. ${profit.toFixed(2)}
+                        ඔබ ලැබූ ලාභය: රු. ${discountProfit.toFixed(2)}
                     </div>
                 </div>`;
             }
