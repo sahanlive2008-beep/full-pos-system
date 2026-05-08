@@ -506,7 +506,7 @@
                 return `
                 <div style="margin-bottom: 8px; padding-bottom: 4px;">
                     <div style="font-weight:bold; font-size: 18px; text-transform: uppercase;">${i.name}</div>
-                    <div class="flex justify-between" style="font-size: 12px;">
+                    <div class="flex justify-between" style="font-size: 14px;">
                         <span style="width:15%">${i.qty}</span>
                         <span style="width:25%">${i.price.toFixed(2)}</span>
                         <span style="width:13%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
@@ -534,9 +534,9 @@
 
             totalHtml += `
                 <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px;">
-                    <p style="font-size: 11px; margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
-                    <p style="font-size: 10px; color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
-                    <div style="font-size: 15px; font-weight: bold; margin-top:10px; width:100%; text-align:center;"></div>
+                    <p style="font-size: 18px; margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
+                    <p style="font-size: 18px; color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
+                    <div style="font-size: 15px; font-weight: bold; margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             `;
             document.getElementById('print-totals').innerHTML = totalHtml;
