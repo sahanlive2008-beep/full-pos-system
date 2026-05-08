@@ -32,7 +32,7 @@
             .print-item-name { font-size: 18px !important; font-weight: bold; }
             .print-item-details { font-size: 14px !important; }
             
-            /* FIXED: TOTAL SECTION STABILITY FIX */
+            /* FIXED: TOTAL IN ONE ROW (මළු මුදල එකම පේළියක තැබීම) */
             .print-total-section { 
                 font-size: 20px !important; 
                 font-weight: bold; 
@@ -41,11 +41,13 @@
                 margin-top: 10px; 
                 clear: both !important; 
                 width: 100% !important; 
-                display: block !important;
-                overflow: auto;
+                display: flex !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+                white-space: nowrap !important; /* වැදගත්: පේළිය කැඩීම වළක්වයි */
             }
             
-            .print-footer-info { font-size: 14px !important; }
+            .print-footer-info { font-size: 14px !important; display: flex; justify-content: space-between; white-space: nowrap; }
             .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
 
             @page { size: auto; margin: 0; }
@@ -270,6 +272,7 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
+        // --- PRINTER LOGIC (UNCHANGED) ---
         async function connectAndSaveBluetooth() {
             const status = document.getElementById('printer-status');
             try {
@@ -292,6 +295,7 @@
             alert("Saved printer forgotten.");
         }
 
+        // --- STABLE PRINT FUNCTION ---
         async function directPrint() {
             const custName = document.getElementById('bill-customer').value;
             if(!custName) return alert("Please select a customer");
@@ -323,16 +327,15 @@
                 </div>`;
             }).join('');
 
+            // FORCE FOOTER TO BE ONE LINE (මුළු මුදල එකම පේළියක)
             let footerHtml = `
                 <div class="print-total-section">
-                    <div class="flex justify-between" style="height: 25px; align-items: center;">
-                        <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
-                    </div>
+                    <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
                 </div>
-                <div class="flex justify-between print-footer-info" style="margin-top:5px; clear: both;">
+                <div class="print-footer-info" style="margin-top:5px; clear: both;">
                     <span>ලබාදුන් මුදල:</span> <span>රු. ${gavePrice.toFixed(2)}</span>
                 </div>
-                <div class="flex justify-between print-footer-info" style="margin-bottom:5px;">
+                <div class="print-footer-info" style="margin-bottom:5px;">
                     <span>ඉතිරි මුදල:</span> <span>රු. ${balance.toFixed(2)}</span>
                 </div>
             `;
@@ -348,8 +351,8 @@
 
             footerHtml += `
                 <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px; clear: both;">
-                    <p class="print-footer-info" style="margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
-                    <p class="print-footer-info" style="color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
+                    <p class="print-footer-info" style="margin: 0; display:block;">Payment: ${paymentMode.toUpperCase()}</p>
+                    <p class="print-footer-info" style="color: #333; margin: 2px 0; display:block;">${new Date().toLocaleString()}</p>
                     <div class="print-thanks-msg" style="margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             `;
@@ -421,8 +424,8 @@
                             .print-table-head { font-size: 15px !important; font-weight: bold; }
                             .print-item-name { font-size: 18px !important; font-weight: bold; margin: 0; }
                             .print-item-details { font-size: 14px !important; }
-                            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both !important; width: 100%; display: block; overflow: auto; }
-                            .print-footer-info { font-size: 14px !important; }
+                            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both !important; width: 100%; display: flex; justify-content: space-between; white-space: nowrap; }
+                            .print-footer-info { font-size: 14px !important; display: flex; justify-content: space-between; white-space: nowrap; }
                             .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
 
                             @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }
@@ -445,6 +448,7 @@
             alert("Sale Completed!");
         }
 
+        // --- REST OF THE CODE (UNCHANGED) ---
         async function searchItems(query) {
             const resultsDiv = document.getElementById('search-results');
             let items;
@@ -553,9 +557,7 @@
 
             let totalHtml = `
                 <div class="print-total-section">
-                    <div class="flex justify-between" style="height: 25px; align-items: center;">
-                        <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
-                    </div>
+                    <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
                 </div>
             `;
 
@@ -570,8 +572,8 @@
 
             totalHtml += `
                 <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px; clear: both;">
-                    <p class="print-footer-info" style="margin: 0;">Payment: ${paymentMode.toUpperCase()}</p>
-                    <p class="print-footer-info" style="color: #333; margin: 2px 0;">${new Date().toLocaleString()}</p>
+                    <p class="print-footer-info" style="margin: 0; display:block;">Payment: ${paymentMode.toUpperCase()}</p>
+                    <p class="print-footer-info" style="color: #333; margin: 2px 0; display:block;">${new Date().toLocaleString()}</p>
                     <div class="print-thanks-msg" style="margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             `;
