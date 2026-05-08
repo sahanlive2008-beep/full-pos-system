@@ -32,7 +32,7 @@
             .print-item-name { font-size: 18px !important; font-weight: bold; }
             .print-item-details { font-size: 14px !important; }
             
-            /* FIXED: TOTAL IN ONE ROW (මළු මුදල එකම පේළියක තැබීම) */
+            /* FIXED: TOTAL IN ONE ROW */
             .print-total-section { 
                 font-size: 20px !important; 
                 font-weight: bold; 
@@ -44,7 +44,7 @@
                 display: flex !important;
                 justify-content: space-between !important;
                 align-items: center !important;
-                white-space: nowrap !important; /* වැදගත්: පේළිය කැඩීම වළක්වයි */
+                white-space: nowrap !important;
             }
             
             .print-footer-info { font-size: 14px !important; display: flex; justify-content: space-between; white-space: nowrap; }
@@ -100,6 +100,7 @@
             <button onclick="showTab('inventory'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📦 STOCK</button>
             <button onclick="showTab('add-items'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">➕ ADD ITEM</button>
             <button onclick="showTab('customers'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">👥 CUSTOMERS</button>
+            <button onclick="showTab('history'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📜 HISTORY</button>
             <button onclick="showTab('reports'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📊 REPORTS</button>
             <button onclick="showTab('printer'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">🖨️ PRINTER SETUP</button>
         </div>
@@ -132,16 +133,11 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-                    <div class="md:col-span-4">
+                    <div class="md:col-span-6">
                         <label class="text-[10px] font-bold text-gray-500 uppercase">පාරිභෝගිකයා (Customer)</label>
-                        <select id="bill-customer" class="w-full p-2 border rounded border-red-500 text-sm" onchange="updateLivePreview()">
-                            <option value="">Select Customer</option>
+                        <select id="bill-customer" class="w-full p-2 border rounded border-blue-500 text-sm" onchange="updateLivePreview()">
+                            <option value="General Customer">General Customer</option>
                         </select>
-                    </div>
-                    
-                    <div class="md:col-span-2">
-                        <label class="text-[10px] font-bold text-blue-600 uppercase">වට්ටම් (Discount)</label>
-                        <input type="number" id="bill-discount" value="0" step="0.01" class="p-2 border border-blue-300 rounded w-full text-sm">
                     </div>
 
                     <div class="md:col-span-4 flex gap-1 h-[38px]">
@@ -162,7 +158,10 @@
                         <span>Total (LKR):</span>
                         <span id="cart-total">0.00</span>
                     </div>
-                    <button onclick="directPrint()" class="w-full bg-blue-600 text-white py-3 rounded mt-3 font-bold">FINISH & PRINT</button>
+                    <div class="grid grid-cols-2 gap-2 mt-3">
+                        <button onclick="directPrint()" class="bg-blue-600 text-white py-3 rounded font-bold">FINISH & PRINT</button>
+                        <button onclick="closeBillWithoutPrint()" class="bg-slate-700 text-white py-3 rounded font-bold">CLOSE BILL</button>
+                    </div>
                 </div>
             </div>
 
@@ -209,8 +208,10 @@
         </div>
 
         <div id="tab-inventory" class="tab-content">
-            <h2 class="font-bold mb-2">Inventory Management</h2>
-            <div id="inventory-list" class="space-y-2"></div>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="font-bold text-xl text-slate-800">📦 Inventory Management</h2>
+            </div>
+            <div id="inventory-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
         </div>
 
         <div id="tab-add-items" class="tab-content">
@@ -219,6 +220,7 @@
                 <input type="text" id="add-code" placeholder="Item Code" class="w-full p-2 border mb-2">
                 <input type="text" id="add-name" placeholder="Item Name" class="w-full p-2 border mb-2">
                 <input type="number" id="add-price" placeholder="Selling Price (LKR)" class="w-full p-2 border mb-2">
+                <input type="number" id="add-discount" placeholder="Discount Per Unit (LKR)" class="w-full p-2 border mb-2">
                 <input type="number" id="add-wholesale" placeholder="Wholesale Price" class="w-full p-2 border mb-2">
                 <input type="number" id="add-stock" placeholder="Initial Stock" class="w-full p-2 border mb-2">
                 <button onclick="saveNewItem()" class="w-full bg-blue-600 text-white py-2 rounded">Save Product</button>
@@ -232,6 +234,13 @@
                 <button onclick="saveCustomer()" class="w-full bg-blue-600 text-white py-2 rounded">Add Customer</button>
             </div>
             <div id="customer-list" class="space-y-2"></div>
+        </div>
+
+        <div id="tab-history" class="tab-content">
+            <div class="bg-white p-4 rounded shadow">
+                <h2 class="font-bold mb-4 text-xl">📜 Bill History</h2>
+                <div id="full-history-list" class="space-y-3"></div>
+            </div>
         </div>
 
         <div id="tab-reports" class="tab-content">
@@ -259,10 +268,10 @@
 
     <script>
         const db = new Dexie("PiyaratnePOS");
-        db.version(3).stores({
-            inventory: "code, name, price, wholesale, stock",
+        db.version(5).stores({
+            inventory: "code, name, price, wholesale, stock, discount",
             customers: "name, phone, status, creditAmount",
-            sales: "++id, date, total, profit, customer, type, items, invoiceNo",
+            sales: "++id, date, total, profit, customer, type, items, invoiceNo, status",
             draftCart: "++id, name, code, qty, price, wholesale, total, discount"
         });
 
@@ -272,7 +281,6 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
-        // --- PRINTER LOGIC (UNCHANGED) ---
         async function connectAndSaveBluetooth() {
             const status = document.getElementById('printer-status');
             try {
@@ -295,10 +303,8 @@
             alert("Saved printer forgotten.");
         }
 
-        // --- STABLE PRINT FUNCTION ---
         async function directPrint() {
-            const custName = document.getElementById('bill-customer').value;
-            if(!custName) return alert("Please select a customer");
+            const custName = document.getElementById('bill-customer').value || "General Customer";
             if(cart.length === 0) return alert("Cart is empty");
 
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
@@ -313,46 +319,102 @@
             const nextId = lastSale ? (lastSale.id + 1) : 1;
             const invoiceNo = nextId.toString().padStart(3, '0');
 
-            const itemsHtml = cart.map(i => {
+            // CRITICAL CHANGE: Print logic no longer saves to db.sales history
+            // We only process stock deduction here.
+            for(let i of cart) {
+                if(i.code && i.code !== 'unlisted') {
+                    const invItem = await db.inventory.get(i.code);
+                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
+                }
+            }
+            
+            const saleData = {
+                invoiceNo, customer: custName, total: subtotal, profit: discountProfit,
+                gavePrice, balance, date: new Date().getTime(), items: cart, type: paymentMode
+            };
+            generateBillPopup(saleData);
+
+            clearCart();
+            alert("Sale Printed. (Not saved in History as requested)");
+        }
+
+        async function closeBillWithoutPrint() {
+            const custName = document.getElementById('bill-customer').value || "General Customer";
+            if(cart.length === 0) return alert("Cart is empty");
+
+            const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
+            const discountProfit = cart.reduce((sum, i) => sum + (i.discount || 0), 0);
+            
+            const lastSale = await db.sales.orderBy('id').last();
+            const nextId = lastSale ? (lastSale.id + 1) : 1;
+            const invoiceNo = nextId.toString().padStart(3, '0');
+
+            // Save to history with "In Progress" status
+            await db.sales.add({
+                date: new Date().getTime(),
+                total: subtotal,
+                profit: discountProfit,
+                customer: custName,
+                type: paymentMode,
+                invoiceNo: invoiceNo,
+                status: 'In Progress',
+                gavePrice: subtotal,
+                balance: 0,
+                items: JSON.parse(JSON.stringify(cart))
+            });
+
+            // Deduct Stock
+            for(let i of cart) {
+                if(i.code && i.code !== 'unlisted') {
+                    const invItem = await db.inventory.get(i.code);
+                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
+                }
+            }
+            
+            clearCart();
+            alert("Bill Saved to History as In Progress.");
+        }
+
+        function generateBillPopup(sale) {
+            const itemsHtml = sale.items.map(i => {
                 const unitPriceAfterDiscount = i.total / i.qty;
                 return `
                 <div style="margin-bottom: 8px; padding-bottom: 4px; clear: both;">
                     <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
                     <div class="flex justify-between print-item-details">
                         <span style="width:15%">${i.qty}</span>
-                        <span style="width:25%">${i.price.toFixed(2)}</span>
-                        <span style="width:13%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
+                        <span style="width:25%">${i.price.toFixed(0)}</span>
+                        <span style="width:13%; font-weight: bold;">${sale.type === 'credit' ? i.price.toFixed(0) : unitPriceAfterDiscount.toFixed(0)}</span>
                         <span style="width:35%; text-align:right; font-weight: bold;">${i.total.toFixed(2)}</span>
                     </div>
                 </div>`;
             }).join('');
 
-            // FORCE FOOTER TO BE ONE LINE (මුළු මුදල එකම පේළියක)
             let footerHtml = `
                 <div class="print-total-section">
-                    <span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span>
+                    <span>මුළු මුදල:</span> <span>රු. ${sale.total.toFixed(2)}</span>
                 </div>
                 <div class="print-footer-info" style="margin-top:5px; clear: both;">
-                    <span>ලබාදුන් මුදල:</span> <span>රු. ${gavePrice.toFixed(2)}</span>
+                    <span>ලබාදුන් මුදල:</span> <span>රු. ${sale.gavePrice.toFixed(2)}</span>
                 </div>
                 <div class="print-footer-info" style="margin-bottom:5px;">
-                    <span>ඉතිරි මුදල:</span> <span>රු. ${balance.toFixed(2)}</span>
+                    <span>ඉතිරි මුදල:</span> <span>රු. ${sale.balance.toFixed(2)}</span>
                 </div>
             `;
 
-            if(discountProfit > 0 && paymentMode !== 'credit') {
+            if(sale.profit > 0 && sale.type !== 'credit') {
               footerHtml += `
                 <div style="text-align: center; margin: 15px 0; clear: both;">
                     <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 17px !important;">
-                        ඔබ ලැබූ ලාභය: රු. ${discountProfit.toFixed(2)}
+                        ඔබ ලැබූ ලාභය: රු. ${sale.profit.toFixed(2)}
                     </div>
                 </div>`;
             }
 
             footerHtml += `
                 <div style="text-align: center; margin-top: 10px; border-top: 0.5px dashed #000; padding-top: 8px; clear: both;">
-                    <p class="print-footer-info" style="margin: 0; display:block;">Payment: ${paymentMode.toUpperCase()}</p>
-                    <p class="print-footer-info" style="color: #333; margin: 2px 0; display:block;">${new Date().toLocaleString()}</p>
+                    <p class="print-footer-info" style="margin: 0; display:block;">Payment: ${sale.type.toUpperCase()}</p>
+                    <p class="print-footer-info" style="color: #333; margin: 2px 0; display:block;">${new Date(sale.date).toLocaleString()}</p>
                     <div class="print-thanks-msg" style="margin-top:10px; width:100%; text-align:center;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             `;
@@ -370,7 +432,7 @@
                     <p class="print-shop-info">අඩුම මිලට ඔබේම තැන</p>
                 </div>
                 <div class="print-bill-details" style="margin-bottom: 5px;">
-                    <div class="flex justify-between"><span>Inv: ${invoiceNo}</span><span>Customer: ${custName}</span></div>
+                    <div class="flex justify-between"><span>Inv: ${sale.invoiceNo}</span><span>Customer: ${sale.customer}</span></div>
                 </div>
                 <div id="items-square-container">
                     <div class="flex justify-between mb-1 print-table-head" style="border-bottom: 1px solid black;">
@@ -384,71 +446,22 @@
                 <div class="text-right mt-1">${footerHtml}</div>
             `;
 
-            await db.sales.add({
-                date: new Date().getTime(),
-                total: subtotal,
-                profit: discountProfit,
-                customer: custName,
-                type: paymentMode,
-                invoiceNo: invoiceNo,
-                items: JSON.parse(JSON.stringify(cart))
-            });
-
-            for(let i of cart) {
-                if(i.code && i.code !== 'unlisted') {
-                    const invItem = await db.inventory.get(i.code);
-                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
-                }
-            }
-
             const printWindow = window.open('', '_blank', 'width=450,height=600');
             if (printWindow) {
                 printWindow.document.open();
-                printWindow.document.write(`
-                    <html>
-                    <head>
-                        <title>Bill Preview</title>
-                        <style>
-                            body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; text-align: center; background: #eee; }
-                            #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
-                            .print-btn { width: 100%; background: #2563eb; color: white; border: none; padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px; cursor: pointer; font-size: 16px; }
-                            .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
-                            #items-square-container { border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 5px 0; margin: 5px 0; min-height: 20px; clear: both; }
-                            .flex { display: flex; }
-                            .justify-between { justify-content: space-between; }
-                            .text-right { text-align: right; }
-                            
-                            .print-shop-name { font-size: 20px !important; font-weight: bold; margin: 0; }
-                            .print-shop-info { font-size: 14px !important; margin: 0; }
-                            .print-bill-details { font-size: 14px !important; }
-                            .print-table-head { font-size: 15px !important; font-weight: bold; }
-                            .print-item-name { font-size: 18px !important; font-weight: bold; margin: 0; }
-                            .print-item-details { font-size: 14px !important; }
-                            .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both !important; width: 100%; display: flex; justify-content: space-between; white-space: nowrap; }
-                            .print-footer-info { font-size: 14px !important; display: flex; justify-content: space-between; white-space: nowrap; }
-                            .print-thanks-msg { font-size: 16px !important; font-weight: bold; }
-
-                            @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }
-                        </style>
-                    </head>
-                    <body>
-                        <button class="print-btn" onclick="window.print();">PRINT BILL NOW</button>
-                        <div id="bill-wrap">${printContent}</div>
-                    </body>
-                    </html>
-                `);
+                printWindow.document.write(`<html><head><title>Bill Preview</title><style>body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; text-align: center; background: #eee; } #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); } .print-btn { width: 100%; background: #2563eb; color: white; border: none; padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px; cursor: pointer; font-size: 16px; } .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; } #items-square-container { border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 5px 0; margin: 5px 0; min-height: 20px; clear: both; } .flex { display: flex; } .justify-between { justify-content: space-between; } .text-right { text-align: right; } .print-shop-name { font-size: 20px !important; font-weight: bold; margin: 0; } .print-shop-info { font-size: 14px !important; margin: 0; } .print-bill-details { font-size: 14px !important; } .print-table-head { font-size: 15px !important; font-weight: bold; } .print-item-name { font-size: 18px !important; font-weight: bold; margin: 0; } .print-item-details { font-size: 14px !important; } .print-total-section { font-size: 20px !important; font-weight: bold; border-top: 2px solid black; padding-top: 5px; margin-top: 5px; clear: both !important; width: 100%; display: flex; justify-content: space-between; white-space: nowrap; } .print-footer-info { font-size: 14px !important; display: flex; justify-content: space-between; white-space: nowrap; } .print-thanks-msg { font-size: 16px !important; font-weight: bold; } @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }</style></head><body><button class=\"print-btn\" onclick=\"window.print();\">PRINT BILL NOW</button><div id=\"bill-wrap\">${printContent}</div></body></html>`);
                 printWindow.document.close();
                 printWindow.focus();
             }
+        }
 
+        async function clearCart() {
             cart = []; 
             await db.draftCart.clear(); 
             renderCart(); 
             updateLivePreview();
-            alert("Sale Completed!");
         }
 
-        // --- REST OF THE CODE (UNCHANGED) ---
         async function searchItems(query) {
             const resultsDiv = document.getElementById('search-results');
             let items;
@@ -482,12 +495,20 @@
         async function addToCart() {
             const code = document.getElementById('bill-code').value;
             const qty = parseFloat(document.getElementById('bill-qty').value);
-            const discount = parseFloat(document.getElementById('bill-discount').value) || 0;
             const item = await db.inventory.get(code);
             
             if(item) {
                 if(item.stock - qty < 10) { alert(`⚠️ Low Stock: ${item.name} is under 10!`); }
-                const cartItem = { ...item, qty: qty, discount: discount, total: (item.price * qty) - discount };
+                const itemDiscount = item.discount || 0;
+                const totalDiscount = itemDiscount * qty;
+                
+                const cartItem = { 
+                    ...item, 
+                    qty: qty, 
+                    discount: totalDiscount, 
+                    total: (item.price * qty) - totalDiscount 
+                };
+                
                 cart.push(cartItem);
                 await db.draftCart.add(cartItem);
                 renderCart();
@@ -500,7 +521,6 @@
             document.getElementById('bill-code').value = '';
             document.getElementById('bill-name').value = '';
             document.getElementById('bill-qty').value = '1';
-            document.getElementById('bill-discount').value = '0';
         }
 
         async function removeFromCart(index) {
@@ -527,7 +547,7 @@
             let total = cart.reduce((sum, i) => sum + i.total, 0);
             document.getElementById('cart-items').innerHTML = cart.map((i, index) => `
                 <div class="flex justify-between border-b py-1">
-                    <span>${i.name} x ${i.qty} ${i.discount > 0 ? '<small class="text-blue-600">(-'+i.discount+')</small>' : ''}</span>
+                    <span>${i.name} x ${i.qty} ${i.discount > 0 ? '<small class="text-blue-600">(-'+i.discount.toFixed(2)+')</small>' : ''}</span>
                     <div class="flex gap-2">
                         <span>${i.total.toFixed(2)}</span>
                         <button onclick="removeFromCart(${index})" class="text-red-500 font-bold">✕</button>
@@ -548,8 +568,8 @@
                     <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
                     <div class="flex justify-between print-item-details">
                         <span style="width:15%">${i.qty}</span>
-                        <span style="width:25%">${i.price.toFixed(2)}</span>
-                        <span style="width:13%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(2) : unitPriceAfterDiscount.toFixed(2)}</span>
+                        <span style="width:25%">${i.price.toFixed(0)}</span>
+                        <span style="width:13%; font-weight: bold;">${paymentMode === 'credit' ? i.price.toFixed(0) : unitPriceAfterDiscount.toFixed(0)}</span>
                         <span style="width:35%; text-align:right; font-weight: bold;">${i.total.toFixed(2)}</span>
                     </div>
                 </div>
@@ -617,6 +637,7 @@
             if(id === 'customers') renderCustomers();
             if(id === 'billing') updateCustomerDropdown();
             if(id === 'reports') calculateReports();
+            if(id === 'history') renderFullHistory();
         }
 
         async function saveNewItem() {
@@ -624,6 +645,7 @@
                 code: document.getElementById('add-code').value,
                 name: document.getElementById('add-name').value.toUpperCase(),
                 price: parseFloat(document.getElementById('add-price').value),
+                discount: parseFloat(document.getElementById('add-discount').value) || 0,
                 wholesale: parseFloat(document.getElementById('add-wholesale').value),
                 stock: parseFloat(document.getElementById('add-stock').value)
             };
@@ -634,19 +656,50 @@
 
         async function renderInventory() {
             const items = await db.inventory.toArray();
-            document.getElementById('inventory-list').innerHTML = items.map(i => `
-                <div class="bg-white p-2 rounded shadow flex justify-between items-center ${i.stock < 10 ? 'border-l-4 border-red-500' : ''}">
-                    <div><p class="font-bold">${i.name} [${i.code}]</p><p class="text-xs">Stock: ${i.stock} | Cost: ${i.wholesale}</p></div>
-                    <div class="text-right">
-                        <input type="number" step="0.001" onchange="updateStock('${i.code}', this.value)" value="${i.stock}" class="w-16 border rounded text-center mb-1"><br>
-                        <input type="number" onchange="updatePrice('${i.code}', this.value)" value="${i.price}" class="w-16 border rounded text-center">
+            document.getElementById('inventory-list').innerHTML = items.map(i => {
+                const lowStockClass = i.stock < 10 ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white';
+                return `
+                <div class="p-4 rounded-xl shadow-sm border-2 ${lowStockClass} transition-all hover:shadow-md">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1">
+                            <h3 class="font-bold text-slate-800 text-lg leading-tight uppercase">${i.name}</h3>
+                            <p class="text-xs font-mono text-slate-500 mt-1">Code: ${i.code}</p>
+                        </div>
+                        <div class="px-2 py-1 rounded text-[10px] font-bold uppercase ${i.stock < 10 ? 'bg-red-200 text-red-800' : 'bg-green-100 text-green-800'}">
+                            ${i.stock < 10 ? 'Low Stock' : 'In Stock'}
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 mt-4">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">📦 Stock Quantity</label>
+                            <input type="number" step="0.001" onchange="updateStock('${i.code}', this.value)" value="${i.stock}" 
+                                class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">💰 Selling Price</label>
+                            <input type="number" onchange="updatePrice('${i.code}', this.value)" value="${i.price}" 
+                                class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold text-blue-700 bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">🏢 Wholesale Cost</label>
+                            <input type="number" onchange="updateWholesale('${i.code}', this.value)" value="${i.wholesale || 0}" 
+                                class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold text-emerald-700 bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">🏷️ Disc / Unit</label>
+                            <input type="number" onchange="updateDiscount('${i.code}', this.value)" value="${i.discount || 0}" 
+                                class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold text-red-600 bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none">
+                        </div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         async function updateStock(code, val) { await db.inventory.update(code, {stock: parseFloat(val)}); }
         async function updatePrice(code, val) { await db.inventory.update(code, {price: parseFloat(val)}); }
+        async function updateWholesale(code, val) { await db.inventory.update(code, {wholesale: parseFloat(val)}); }
+        async function updateDiscount(code, val) { await db.inventory.update(code, {discount: parseFloat(val)}); }
 
         async function saveCustomer() {
             const name = document.getElementById('cust-name').value;
@@ -671,13 +724,77 @@
             const c = await db.customers.get(name);
             const newAmount = Math.max(0, c.creditAmount - amount);
             await db.customers.update(name, { creditAmount: newAmount, status: newAmount <= 0 ? 'cash' : 'credit' });
-            await db.sales.add({ date: new Date().getTime(), total: amount, profit: 0, customer: name, type: 'settlement', items: [{name: 'Settlement', total: amount, qty: 1}] });
+            // Settlement records stay in reports for calculation but aren't strictly "closed bills"
+            await db.sales.add({ date: new Date().getTime(), total: amount, profit: 0, customer: name, type: 'settlement', items: [{name: 'Settlement', total: amount, qty: 1}], status: 'Settled' });
             renderCustomers();
         }
 
         async function updateCustomerDropdown() {
             const list = await db.customers.toArray();
-            document.getElementById('bill-customer').innerHTML = '<option value="">Select Customer</option>' + list.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            document.getElementById('bill-customer').innerHTML = '<option value="General Customer">General Customer</option>' + list.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        }
+
+        async function renderFullHistory() {
+            // Sort to show the newest closed bill at the top
+            const sales = await db.sales.orderBy('date').reverse().toArray();
+            // Filter to only show bills that are "In Progress"
+            const filteredSales = sales.filter(s => s.status === 'In Progress');
+            
+            document.getElementById('full-history-list').innerHTML = filteredSales.map(s => `
+                <div class="p-3 border rounded bg-white shadow-sm flex justify-between items-center">
+                    <div>
+                        <p class="font-bold">INV: ${s.invoiceNo || 'N/A'} - ${s.customer}</p>
+                        <p class="text-xs text-gray-500">${new Date(s.date).toLocaleString()}</p>
+                        <p class="text-sm font-bold text-blue-700">LKR ${s.total.toFixed(2)}</p>
+                    </div>
+                    <div class="text-right flex flex-col gap-1">
+                        <span class="text-[10px] font-bold px-2 py-1 rounded block bg-orange-100 text-orange-700">${s.status}</span>
+                        <div class="flex gap-1">
+                           <button onclick='editSale(${s.id})' class="bg-blue-600 text-white px-4 py-1 rounded text-[10px] font-bold">EDIT / RESTORE</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function editSale(id) {
+            const sale = await db.sales.get(id);
+            if(!sale) return;
+
+            if(!confirm("Restore these items to Billing tab? This will remove the record from History.")) return;
+
+            // 1. Revert Stock Deduction
+            for(let i of sale.items) {
+                if(i.code && i.code !== 'unlisted') {
+                    const invItem = await db.inventory.get(i.code);
+                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock + i.qty});
+                }
+            }
+
+            // 2. Clear current billing session
+            cart = [];
+            await db.draftCart.clear();
+
+            // 3. Load items into cart
+            const restoredItems = JSON.parse(JSON.stringify(sale.items));
+            for(let item of restoredItems) {
+                const draftId = await db.draftCart.add(item);
+                item.id = draftId;
+                cart.push(item);
+            }
+
+            // 4. Update UI context
+            document.getElementById('bill-customer').value = sale.customer || "General Customer";
+            setPaymentMode(sale.type || 'cash');
+
+            // 5. Delete from History
+            await db.sales.delete(id);
+
+            // 6. Refresh UI and Redirect
+            renderCart();
+            updateLivePreview();
+            showTab('billing');
+            alert("Items restored to Billing. Original History record deleted.");
         }
 
         let html5QrCode;
@@ -712,9 +829,13 @@
         async function calculateReports() {
             const now = new Date();
             let startTime = currentFilter === 'day' ? new Date().setHours(0,0,0,0) : (currentFilter === 'week' ? new Date(now.setDate(now.getDate() - 7)).getTime() : new Date(now.setMonth(now.getMonth() - 1)).getTime());
+            
+            // Reports include everything for financial accuracy
             const sales = await db.sales.where('date').aboveOrEqual(startTime).toArray();
+            
             document.getElementById('rep-profit').innerText = `LKR ${sales.reduce((s, a) => s + (a.profit || 0), 0).toFixed(2)}`;
             document.getElementById('rep-sales').innerText = `LKR ${sales.reduce((s, a) => s + (a.total || 0), 0).toFixed(2)}`;
+            
             document.getElementById('bill-history-list').innerHTML = sales.sort((a,b) => b.date - a.date).map(s => `
                 <div class="border p-2 rounded text-sm bg-white shadow-sm mb-1">
                     <div class="flex justify-between font-bold"><span>${s.customer}</span><span class="text-blue-700">${s.total.toFixed(2)}</span></div>
