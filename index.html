@@ -160,7 +160,7 @@
                     </div>
 
                     <div id="print-totals" class="text-right mt-1"></div>
-                    <div class="text-center mt-2" style="font-size: 18px; font-weight: bold;">ස්තූතියි නැවත එන්න!</div>
+                    <div class="text-center mt-2" style="font-size: 11px; font-weight: bold;">ස්තූතියි නැවත එන්න!</div>
                 </div>
             </div>
         </div>
@@ -243,8 +243,6 @@
         let bleCharacteristic = null;
         let currentFilter = 'day';
 
-        // --- PART 1 & 2 COMBINED LOGIC ---
-
         async function connectAndSaveBluetooth() {
             const status = document.getElementById('printer-status');
             try {
@@ -275,6 +273,7 @@
             const subtotal = cart.reduce((sum, i) => sum + i.total, 0);
             const profit = cart.reduce((sum, i) => sum + (i.total - (i.wholesale * i.qty)), 0);
 
+            // Save to DB
             await db.sales.add({
                 date: new Date().getTime(),
                 total: subtotal,
@@ -284,6 +283,7 @@
                 items: JSON.parse(JSON.stringify(cart))
             });
 
+            // Update Stock
             for(let i of cart) {
                 if(i.code && i.code !== 'unlisted') {
                     const invItem = await db.inventory.get(i.code);
@@ -292,43 +292,51 @@
             }
 
             const printContent = document.getElementById('print-area').innerHTML;
-            const printWindow = window.open('', '', 'width=400,height=600');
+            const printWindow = window.open('', '', 'width=450,height=600');
             
+            // ERROR FIX: Ensure window write happens correctly
+            printWindow.document.open();
             printWindow.document.write(`
                 <html>
                 <head>
                     <title>Bill Preview</title>
                     <style>
-                        body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; font-size: 11px; text-align: center; }
-                        #bill-wrap { width: 100%; text-align: left; background: white; padding: 2mm; }
+                        body { width: 58mm; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 5px; font-size: 11px; text-align: center; background: #eee; }
+                        #bill-wrap { width: 58mm; text-align: left; background: white; padding: 2mm; margin: 0 auto; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
                         .print-btn { 
                             width: 100%; background: #2563eb; color: white; border: none; 
                             padding: 15px; font-weight: bold; border-radius: 5px; margin-bottom: 20px;
                             cursor: pointer; font-size: 16px;
                         }
-                        .receipt-border { border:8px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
-                        #items-square-container { border: 1px solid black; border-radius: 8px; padding: 5px; margin: 5px 0; }
+                        .receipt-border { border:1.5px solid black; border-radius: 8px; padding: 5px; margin-bottom: 5px; text-align: center; line-height:1.1; }
+                        #items-square-container { border: 1.5px solid black; border-radius: 8px; padding: 5px; margin: 5px 0; }
                         .flex { display: flex; }
                         .justify-between { justify-content: space-between; }
                         .text-right { text-align: right; }
-                        img { max-width: 100%; height: auto; margin-bottom: 5px; }
-                        @media print { .print-btn { display: none !important; } @page { margin: 0; } body { padding: 0; } }
+                        img { max-width: 100%; height: auto; margin-bottom: 5px; display: block; margin-left: auto; margin-right: auto; }
+                        @media print { .print-btn { display: none !important; } @page { margin: 0; size: 58mm auto; } body { background: white; padding: 0; } #bill-wrap { box-shadow: none; width: 100%; } }
                     </style>
                 </head>
                 <body>
-                    <button class="print-btn" onclick="window.print(); window.close();">PRINT BILL</button>
+                    <button class="print-btn" onclick="window.print(); window.close();">PRINT BILL NOW</button>
                     <div id="bill-wrap">
                         ${printContent}
                     </div>
+                    <script>
+                        // Auto-focus the print button
+                        window.onload = function() { window.focus(); };
+                    <\/script>
                 </body>
                 </html>
             `);
             printWindow.document.close();
 
+            // Clear Cart
             cart = []; 
             await db.draftCart.clear(); 
             renderCart(); 
             updateLivePreview();
+            alert("Sale Completed!");
         }
 
         async function searchItems(query) {
@@ -444,7 +452,7 @@
                 </div>
             `;
             if(profit > 0 && paymentMode !== 'credit' && totalDiscount > 0) {
-                totalHtml += `<p class="font-bold" style="font-size: 15px;">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
+                totalHtml += `<p class="font-bold" style="font-size: 11px;">ඔබ ලැබූ ලාභය: LKR ${profit.toFixed(2)}</p>`;
             }
             totalHtml += `<p style="font-size: 10px; margin-top: 4px;">Payment: ${paymentMode.toUpperCase()} | ${new Date().toLocaleString()}</p>`;
             document.getElementById('print-totals').innerHTML = totalHtml;
@@ -581,21 +589,52 @@
             if(html5QrCode) html5QrCode.stop().then(() => document.getElementById('scanner-container').classList.add('hidden'));
         }
 
-        function setReportFilter(range) { currentFilter = range; calculateReports(); }
+        function setReportFilter(range) { 
+            currentFilter = range; 
+            // Update UI buttons
+            ['day', 'week', 'month'].forEach(f => {
+                const btn = document.getElementById('filter-' + f);
+                if(f === range) {
+                    btn.classList.replace('bg-blue-100', 'bg-blue-600');
+                    btn.classList.replace('text-blue-800', 'text-white');
+                } else {
+                    btn.classList.replace('bg-blue-600', 'bg-blue-100');
+                    btn.classList.replace('text-white', 'text-blue-800');
+                }
+            });
+            calculateReports(); 
+        }
 
         async function calculateReports() {
             const now = new Date();
             let startTime;
-            if (currentFilter === 'day') { startTime = new Date().setHours(0,0,0,0); }
-            else if (currentFilter === 'week') { startTime = now.setDate(now.getDate() - 7); }
-            else { startTime = now.setMonth(now.getMonth() - 1); }
+            
+            if (currentFilter === 'day') { 
+                startTime = new Date().setHours(0,0,0,0); 
+            } else if (currentFilter === 'week') { 
+                startTime = new Date(now.setDate(now.getDate() - 7)).getTime(); 
+            } else { 
+                startTime = new Date(now.setMonth(now.getMonth() - 1)).getTime(); 
+            }
 
-            const sales = await db.sales.filter(s => s.date >= startTime).toArray();
-            document.getElementById('rep-profit').innerText = `LKR ${sales.reduce((s,a) => s+a.profit, 0).toFixed(2)}`;
-            document.getElementById('rep-sales').innerText = `LKR ${sales.reduce((s,a) => s+a.total, 0).toFixed(2)}`;
-            document.getElementById('bill-history-list').innerHTML = sales.reverse().map(s => `
-                <div class="border p-2 rounded text-sm bg-gray-50 mb-1">
-                    <div class="flex justify-between"><span>${s.customer}</span><span>${s.total.toFixed(2)}</span></div>
+            const sales = await db.sales.where('date').aboveOrEqual(startTime).toArray();
+            
+            const totalProfit = sales.reduce((s, a) => s + (a.profit || 0), 0);
+            const totalSales = sales.reduce((s, a) => s + (a.total || 0), 0);
+
+            document.getElementById('rep-profit').innerText = `LKR ${totalProfit.toFixed(2)}`;
+            document.getElementById('rep-sales').innerText = `LKR ${totalSales.toFixed(2)}`;
+            
+            document.getElementById('bill-history-list').innerHTML = sales.sort((a,b) => b.date - a.date).map(s => `
+                <div class="border p-2 rounded text-sm bg-white shadow-sm mb-1">
+                    <div class="flex justify-between font-bold">
+                        <span>${s.customer}</span>
+                        <span class="text-blue-700">${s.total.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-gray-500">
+                        <span>${new Date(s.date).toLocaleString()}</span>
+                        <span class="text-green-600">Profit: ${s.profit.toFixed(2)}</span>
+                    </div>
                 </div>
             `).join('');
         }
