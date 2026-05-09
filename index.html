@@ -324,9 +324,19 @@
                 }
             }
             
+            let creditAmount = 0;
+            if(paymentMode === 'credit') {
+                const customer = await db.customers.get(custName);
+                if(customer) {
+                    creditAmount = (customer.creditAmount || 0) + subtotal;
+                    await db.customers.update(custName, { creditAmount, status: 'credit' });
+                }
+            }
+
             const saleData = {
                 invoiceNo, customer: custName, total: subtotal, profit: discountProfit,
-                gavePrice, balance, date: new Date().getTime(), items: cart, type: paymentMode
+                gavePrice, balance, date: new Date().getTime(), items: cart, type: paymentMode,
+                remainingCredit: creditAmount
             };
             generateBillPopup(saleData);
 
@@ -365,6 +375,14 @@
                 }
             }
             
+            if(paymentMode === 'credit') {
+                const customer = await db.customers.get(custName);
+                if(customer) {
+                    const newCredit = (customer.creditAmount || 0) + subtotal;
+                    await db.customers.update(custName, { creditAmount: newCredit, status: 'credit' });
+                }
+            }
+
             clearCart();
             alert("Bill Saved to History as In Progress.");
         }
@@ -389,19 +407,33 @@
                 <div class="print-total-section">
                     <span>මුළු මුදල:</span> <span>රු. ${sale.total.toFixed(2)}</span>
                 </div>
+            `;
+
+            if(sale.type === 'cash') {
+              footerHtml += `
                 <div class="print-footer-info" style="margin-top:5px; clear: both;">
                     <span>ලබාදුන් මුදල:</span> <span>රු. ${sale.gavePrice.toFixed(2)}</span>
                 </div>
                 <div class="print-footer-info" style="margin-bottom:5px;">
                     <span>ඉතිරි මුදල:</span> <span>රු. ${sale.balance.toFixed(2)}</span>
                 </div>
-            `;
+              `;
+            }
 
             if(sale.profit > 0 && sale.type !== 'credit') {
               footerHtml += `
                 <div style="text-align: center; margin: 15px 0; clear: both;">
                     <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 17px !important;">
                         ඔබ ලැබූ ලාභය: රු. ${sale.profit.toFixed(2)}
+                    </div>
+                </div>`;
+            }
+
+            if(sale.type === 'credit' && sale.remainingCredit > 0) {
+              footerHtml += `
+                <div style="text-align: center; margin: 15px 0; clear: both;">
+                    <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 18px !important;">
+                        ගෙවීමට ඇති මුදල: රු. ${sale.remainingCredit.toFixed(2)}
                     </div>
                 </div>`;
             }
@@ -554,9 +586,10 @@
             document.getElementById('cart-total').innerText = total.toFixed(2);
         }
 
-        function updateLivePreview() {
+        async function updateLivePreview() {
             const subtotal = cart.reduce((sum, i) => sum + (paymentMode === 'credit' ? (i.price * i.qty) : i.total), 0);
             const discountProfit = paymentMode === 'credit' ? 0 : cart.reduce((sum, i) => sum + (i.discount || 0), 0);
+            const custName = document.getElementById('bill-customer').value || "General Customer";
             
             document.getElementById('print-items').innerHTML = cart.map(i => {
                 const unitPriceAfterDiscount = i.total / i.qty;
@@ -586,6 +619,19 @@
                         ඔබ ලැබූ ලාභය: රු. ${discountProfit.toFixed(2)}
                     </div>
                 </div>`;
+            }
+
+            if(paymentMode === 'credit' && custName !== 'General Customer') {
+                const customer = await db.customers.get(custName);
+                if(customer) {
+                    const currentCredit = (customer.creditAmount || 0) + subtotal;
+                    totalHtml += `
+                    <div style="text-align: center; margin: 15px 0; clear: both;">
+                        <div style="display: inline-block; border: 1.5px solid black; padding: 10px 20px; font-weight: bold; font-size: 18px;">
+                            ගෙවීමට ඇති මුදල: රු. ${currentCredit.toFixed(2)}
+                        </div>
+                    </div>`;
+                }
             }
 
             totalHtml += `
@@ -710,11 +756,30 @@
         async function renderCustomers() {
             const list = await db.customers.toArray();
             document.getElementById('customer-list').innerHTML = list.map(c => `
-                <div class="bg-white p-3 rounded flex justify-between shadow">
-                    <div><p class="font-bold">${c.name}</p><p class="text-xs ${c.status === 'credit' ? 'text-red-500' : 'text-green-500'} font-bold uppercase">${c.status} : ${c.creditAmount.toFixed(2)} LKR</p></div>
-                    <div class="flex gap-2"><button onclick="settleCredit('${c.name}')" class="text-xs bg-green-100 p-2 rounded border border-green-500">Settle</button></div>
+                <div class="bg-white p-3 rounded flex justify-between shadow items-center">
+                    <div>
+                        <p class="font-bold">${c.name}</p>
+                        <div class="flex items-center gap-1 mt-1">
+                            <span class="text-xs font-bold uppercase ${c.status === 'credit' ? 'text-red-500' : 'text-green-500'}">${c.status}:</span>
+                            <input type="number" step="0.01" inputmode="decimal" onchange="updateCustomerCredit('${c.name}', this.value)" value="${c.creditAmount.toFixed(2)}" 
+                                class="w-24 p-1 border rounded text-xs font-bold focus:ring-1 focus:ring-blue-400">
+                            <span class="text-[10px] text-gray-400 font-bold">LKR</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="settleCredit('${c.name}')" class="text-xs bg-green-100 p-2 rounded border border-green-500 font-bold">Settle</button>
+                    </div>
                 </div>
             `).join('');
+        }
+
+        async function updateCustomerCredit(name, val) {
+            const amount = parseFloat(val) || 0;
+            await db.customers.update(name, { 
+                creditAmount: amount, 
+                status: amount > 0 ? 'credit' : 'cash' 
+            });
+            renderCustomers();
         }
 
         async function settleCredit(name) {
