@@ -707,11 +707,15 @@
                 <div class="p-4 rounded-xl shadow-sm border-2 ${lowStockClass} transition-all hover:shadow-md">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex-1">
-                            <h3 class="font-bold text-slate-800 text-lg leading-tight uppercase">${i.name}</h3>
+                            <input type="text" onchange="updateItemName('${i.code}', this.value)" value="${i.name}" 
+                                class="w-full font-bold text-slate-800 text-lg leading-tight uppercase bg-transparent border-b border-dashed border-slate-300 focus:border-blue-500 outline-none">
                             <p class="text-xs font-mono text-slate-500 mt-1">Code: ${i.code}</p>
                         </div>
-                        <div class="px-2 py-1 rounded text-[10px] font-bold uppercase ${i.stock < 10 ? 'bg-red-200 text-red-800' : 'bg-green-100 text-green-800'}">
-                            ${i.stock < 10 ? 'Low Stock' : 'In Stock'}
+                        <div class="flex flex-col gap-1 items-end">
+                            <div class="px-2 py-1 rounded text-[10px] font-bold uppercase ${i.stock < 10 ? 'bg-red-200 text-red-800' : 'bg-green-100 text-green-800'}">
+                                ${i.stock < 10 ? 'Low Stock' : 'In Stock'}
+                            </div>
+                            <button onclick="deleteItem('${i.code}')" class="text-[10px] text-red-500 font-bold uppercase hover:underline">🗑️ Delete Product</button>
                         </div>
                     </div>
                     
@@ -741,10 +745,18 @@
             `}).join('');
         }
 
+        async function updateItemName(code, val) { await db.inventory.update(code, {name: val.toUpperCase()}); }
         async function updateStock(code, val) { await db.inventory.update(code, {stock: parseFloat(val)}); }
         async function updatePrice(code, val) { await db.inventory.update(code, {price: parseFloat(val)}); }
         async function updateWholesale(code, val) { await db.inventory.update(code, {wholesale: parseFloat(val)}); }
         async function updateDiscount(code, val) { await db.inventory.update(code, {discount: parseFloat(val)}); }
+        
+        async function deleteItem(code) {
+            if(confirm("Are you sure you want to PERMANENTLY DELETE this product from stock?")) {
+                await db.inventory.delete(code);
+                renderInventory();
+            }
+        }
 
         async function saveCustomer() {
             const name = document.getElementById('cust-name').value;
