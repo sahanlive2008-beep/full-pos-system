@@ -208,9 +208,14 @@
         <div id="tab-inventory" class="tab-content">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="font-bold text-xl text-slate-800">📦 Inventory Management</h2>
-                <button id="upload-cloud-btn" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 shadow hover:bg-blue-700">
-                    ☁️ SYNC TO CLOUD
-                </button>
+                <div class="flex gap-2">
+                    <button id="download-cloud-btn" class="bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 shadow hover:bg-green-700">
+                        📥 DOWNLOAD FROM CLOUD
+                    </button>
+                    <button id="upload-cloud-btn" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 shadow hover:bg-blue-700">
+                        ☁️ SYNC TO CLOUD
+                    </button>
+                </div>
             </div>
             
             <div class="mb-4">
@@ -274,7 +279,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-        import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+        import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCPnLq-pFgaQ6Uefx6tcc5iJwrbUvhvwo0",
@@ -327,7 +332,47 @@
             }
         };
 
+        window.downloadInventoryFromCloud = async function() {
+            const btn = document.getElementById('download-cloud-btn');
+            try {
+                btn.innerText = "⏳ DOWNLOADING...";
+                btn.disabled = true;
+
+                const dbRef = ref(fb_db);
+                const snapshot = await get(child(dbRef, 'inventory'));
+
+                if (snapshot.exists()) {
+                    const cloudData = snapshot.val();
+                    const itemsArray = Array.isArray(cloudData) ? cloudData : Object.values(cloudData);
+
+                    if(confirm(`Found ${itemsArray.length} items in Cloud. This will update your local stock. Continue?`)) {
+                        for(let item of itemsArray) {
+                            await db.inventory.put({
+                                code: String(item.code),
+                                name: String(item.name).toUpperCase(),
+                                price: parseFloat(item.price) || 0,
+                                wholesale: parseFloat(item.wholesale) || 0,
+                                stock: parseFloat(item.stock) || 0,
+                                discount: parseFloat(item.discount) || 0
+                            });
+                        }
+                        alert("Inventory successfully downloaded and updated!");
+                        if(typeof renderInventory === 'function') renderInventory();
+                    }
+                } else {
+                    alert("No inventory data found on Cloud.");
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Download failed: " + error.message);
+            } finally {
+                btn.innerText = "📥 DOWNLOAD FROM CLOUD";
+                btn.disabled = false;
+            }
+        };
+
         document.getElementById('upload-cloud-btn').addEventListener('click', window.uploadInventoryToCloud);
+        document.getElementById('download-cloud-btn').addEventListener('click', window.downloadInventoryFromCloud);
     </script>
 
     <script>
