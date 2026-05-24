@@ -139,6 +139,7 @@
             <button onclick="showTab('billing'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">🛒 BILLING</button>
             <button onclick="showTab('inventory'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📦 STOCK</button>
             <button onclick="showTab('add-items'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">➕ ADD ITEM</button>
+            <button onclick="showTab('customers'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">👥 CUSTOMERS</button>
             <button onclick="showTab('history'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📜 HISTORY</button>
             <button onclick="showTab('reports'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">📊 REPORTS</button>
             <button onclick="showTab('printer'); toggleSidebar()" class="text-left py-2 border-b border-slate-700">🖨️ PRINTER SETUP</button>
@@ -196,10 +197,9 @@
                         <span>Total (LKR):</span>
                         <span id="cart-total">0.00</span>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 mt-3">
-                        <button onclick="directPrint()" class="bg-blue-600 text-white py-3 rounded font-bold text-sm">🖨️ PRINT</button>
-                        <button onclick="saveBillToHistory()" class="bg-green-600 text-white py-3 rounded font-bold text-sm">💾 SAVE</button>
-                        <button onclick="closeBillWithoutPrint()" class="bg-slate-700 text-white py-3 rounded font-bold text-sm">✅ CLOSE</button>
+                    <div class="grid grid-cols-2 gap-2 mt-3">
+                        <button onclick="directPrint()" class="bg-blue-600 text-white py-3 rounded font-bold">FINISH & PRINT</button>
+                        <button onclick="closeBillWithoutPrint()" class="bg-slate-700 text-white py-3 rounded font-bold">CLOSE BILL</button>
                     </div>
                 </div>
             </div>
@@ -276,7 +276,7 @@
                         <input type="number" id="add-creditprice" inputmode="decimal" placeholder="Credit Price" class="w-full p-2 border rounded">
                     </div>
                 </div>
-                <input type="number" id="add-discount" inputmode="decimal" placeholder="Discount Per Unit (LKR)" class="w-full p-2 border mb-2 rounded">
+                <input type="number" id="add-discount" inputmode="decimal" placeholder="Discount Per Unit (LKR) — Cash bills only" class="w-full p-2 border mb-2 rounded">
                 <input type="number" id="add-wholesale" inputmode="decimal" placeholder="Wholesale / Cost Price" class="w-full p-2 border mb-2 rounded">
                 <input type="number" id="add-stock" inputmode="decimal" placeholder="Initial Stock" class="w-full p-2 border mb-2 rounded">
                 <button onclick="saveNewItem()" class="w-full bg-blue-600 text-white py-2 rounded font-bold">Save Product</button>
@@ -456,7 +456,7 @@
     <!-- ============ MAIN SCRIPT ============ -->
     <script>
         const db = new Dexie("PiyaratnePOS");
-        db.version(9).stores({
+        db.version(6).stores({
             inventory: "code, name, price, wholesale, stock, discount",
             customers: "name, phone, status, creditAmount",
             sales: "++id, date, total, profit, customer, type, items, invoiceNo, status",
@@ -652,14 +652,10 @@
                         <span>Balance:</span><span>LKR ${(sale.balance||0).toFixed(2)}</span>
                     </div>` : ''}
                     <div class="flex justify-between text-xs mt-1">
-                        <span>ඔබ ලැබූ ලාභය:</span><span class="text-green-600 font-bold">LKR ${(sale.profit||0).toFixed(2)}</span>
+                        <span>Profit:</span><span class="text-green-600 font-bold">LKR ${(sale.profit||0).toFixed(2)}</span>
                     </div>
                 </div>
                 <div class="text-center mt-3 text-xs font-bold px-2 py-1 rounded ${sale.status==='Printed'?'bg-green-100 text-green-700':sale.status==='Closed'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${sale.status}</div>
-                <div class="grid grid-cols-2 gap-2 mt-3">
-                    <button onclick="editSaleFromModal(currentBillDetailSale)" class="bg-blue-600 text-white py-2 rounded font-bold text-xs">✏️ EDIT</button>
-                    <button onclick="reprintSale(currentBillDetailSale)" class="bg-slate-700 text-white py-2 rounded font-bold text-xs">🖨️ REPRINT</button>
-                </div>
             `;
 
             document.getElementById('bill-detail-content').innerHTML = html;
@@ -699,7 +695,7 @@
             }, 0);
 
             const discountProfit = paymentMode === 'credit'
-                ? cart.reduce((sum, i) => sum + Math.max(0, ((i.cashPrice||i.price||0) - (i.creditPrice||i.cashPrice||i.price||0)) * i.qty), 0)
+                ? cart.reduce((sum, i) => { const cp = i.creditPrice||i.cashPrice||i.price; return sum + (cp-(i.wholesale||0))*i.qty; }, 0)
                 : cart.reduce((sum, i) => sum + (i.discount || 0), 0);
 
             const gavePriceInput = prompt("ලබාදුන් මුදල (Gave Price):", subtotal.toFixed(2));
@@ -739,7 +735,7 @@
             }, 0);
 
             const discountProfit = paymentMode === 'credit'
-                ? cart.reduce((sum, i) => sum + Math.max(0, ((i.cashPrice||i.price||0) - (i.creditPrice||i.cashPrice||i.price||0)) * i.qty), 0)
+                ? cart.reduce((sum, i) => { const cp = i.creditPrice||i.cashPrice||i.price; return sum + (cp-(i.wholesale||0))*i.qty; }, 0)
                 : cart.reduce((sum, i) => sum + (i.discount || 0), 0);
 
             const lastSale = await db.sales.orderBy('id').last();
@@ -782,8 +778,9 @@
             const itemsHtml = sale.items.map(i => {
                 const cashPrice = i.cashPrice || i.price;
                 const creditPrice = i.creditPrice || i.price;
+                const unitPriceAfterDiscount = i.total / i.qty;
                 const rowTotal = sale.type === 'credit' ? (creditPrice * i.qty) : i.total;
-                const ourPrice = sale.type === 'credit' ? creditPrice : (i.total / i.qty);
+                const ourPrice = sale.type === 'credit' ? creditPrice : unitPriceAfterDiscount;
                 return `
                 <div style="margin-bottom: 8px; padding-bottom: 4px; clear: both;">
                     <div class="print-item-name" style="text-transform: uppercase;">${i.name}</div>
@@ -808,11 +805,21 @@
                 </div>`;
             }
 
-            if(sale.profit > 0) {
+            if(sale.profit > 0 && sale.type === 'cash') {
                 footerHtml += `<div style="text-align:center;margin:15px 0;clear:both;">
                     <div style="display:inline-block;border:1.5px solid black;padding:10px 20px;font-weight:bold;font-size:17px!important;">
                         ඔබ ලැබූ ලාභය: රු. ${sale.profit.toFixed(2)}
                     </div></div>`;
+            }
+
+            if(sale.type === 'credit') {
+                const creditSavings = sale.items.reduce((s, i) => s + ((i.cashPrice||i.price)-(i.creditPrice||i.price))*i.qty, 0);
+                if(creditSavings > 0) {
+                    footerHtml += `<div style="text-align:center;margin:15px 0;clear:both;">
+                        <div style="display:inline-block;border:1.5px solid black;padding:10px 20px;font-weight:bold;font-size:18px!important;">
+                            ඔබ ලැබූ ලාභය: රු. ${creditSavings.toFixed(2)}
+                        </div></div>`;
+                }
             }
 
             footerHtml += `
@@ -1010,15 +1017,14 @@
                 const cp = i.creditPrice || i.cashPrice || i.price;
                 return sum + (paymentMode === 'credit' ? (cp * i.qty) : i.total);
             }, 0);
-            const discountProfit = paymentMode === 'credit'
-                ? cart.reduce((sum, i) => sum + Math.max(0, ((i.cashPrice||i.price||0) - (i.creditPrice||i.cashPrice||i.price||0)) * i.qty), 0)
-                : cart.reduce((sum, i) => sum + (i.discount || 0), 0);
+            const discountProfit = paymentMode === 'credit' ? 0 : cart.reduce((sum, i) => sum + (i.discount || 0), 0);
 
             document.getElementById('print-items').innerHTML = cart.map(i => {
                 const cashPrice = i.cashPrice || i.price;
                 const creditPrice = i.creditPrice || i.price;
+                const unitPriceAfterDiscount = i.total / i.qty;
                 const rowTotal = paymentMode === 'credit' ? (creditPrice * i.qty) : i.total;
-                const ourPrice = paymentMode === 'credit' ? creditPrice : (i.total / i.qty);
+                const ourPrice = paymentMode === 'credit' ? creditPrice : unitPriceAfterDiscount;
                 return `
                 <div style="margin-bottom:8px;padding-bottom:4px;clear:both;">
                     <div class="print-item-name" style="text-transform:uppercase;">${i.name}</div>
@@ -1033,11 +1039,21 @@
 
             let totalHtml = `<div class="print-total-section"><span>මුළු මුදල:</span> <span>රු. ${subtotal.toFixed(2)}</span></div>`;
 
-            if(discountProfit > 0) {
+            if(discountProfit > 0 && paymentMode !== 'credit') {
                 totalHtml += `<div style="text-align:center;margin:15px 0;clear:both;">
                     <div style="display:inline-block;border:1.5px solid black;padding:10px 20px;font-weight:bold;font-size:17px;">
                         ඔබ ලැබූ ලාභය: රු. ${discountProfit.toFixed(2)}
                     </div></div>`;
+            }
+
+            if(paymentMode === 'credit') {
+                const creditSavings = cart.reduce((s, i) => s + ((i.cashPrice||i.price)-(i.creditPrice||i.price))*i.qty, 0);
+                if(creditSavings > 0) {
+                    totalHtml += `<div style="text-align:center;margin:15px 0;clear:both;">
+                        <div style="display:inline-block;border:1.5px solid black;padding:10px 20px;font-weight:bold;font-size:18px;">
+                            ඔබ ලැබූ ලාභය: රු. ${creditSavings.toFixed(2)}
+                        </div></div>`;
+                }
             }
 
             totalHtml += `
@@ -1084,6 +1100,7 @@
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById('tab-' + id).classList.add('active');
             if(id === 'inventory') renderInventory();
+            if(id === 'customers') renderCustomers();
             if(id === 'reports') calculateReports();
             if(id === 'history') renderFullHistory();
         }
@@ -1143,7 +1160,7 @@
                             <input type="number" inputmode="decimal" onchange="updateCreditPrice('${i.code}', this.value)" value="${creditPrice}" class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold text-red-600 bg-slate-50 focus:ring-2 focus:ring-red-400 outline-none">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-[10px] font-bold text-slate-400 uppercase">🏢 Wholesale / Cost</label>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase">🏢 Wholesale</label>
                             <input type="number" inputmode="decimal" onchange="updateWholesale('${i.code}', this.value)" value="${i.wholesale || 0}" class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold text-emerald-700 bg-slate-50 focus:ring-2 focus:ring-blue-400 outline-none">
                         </div>
                         <div class="space-y-1 col-span-2">
@@ -1223,55 +1240,22 @@
             if (filtered.length === 0) { document.getElementById('full-history-list').innerHTML = '<p class="text-center text-gray-400 py-8">No bills found</p>'; return; }
 
             document.getElementById('full-history-list').innerHTML = filtered.map(s => {
-                const statusColor = s.status === 'Printed' ? 'bg-green-100 text-green-700' : s.status === 'Closed' ? 'bg-blue-100 text-blue-700' : s.status === 'Saved' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700';
+                const statusColor = s.status === 'Printed' ? 'bg-green-100 text-green-700' : s.status === 'Closed' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700';
                 const typeColor = s.type === 'credit' ? 'text-red-600' : 'text-green-700';
-                const profitColor = (s.profit||0) > 0 ? 'text-green-600' : 'text-gray-400';
+                const canRestore = s.status !== 'Printed' && s.status !== 'Settled';
                 return `
-                <div class="border rounded bg-white shadow-sm overflow-hidden">
-                    <div class="p-3 cursor-pointer active:bg-gray-50" onclick="viewBillFromHistory(${s.id})">
-                        <div class="flex justify-between items-start">
-                            <div class="flex-1">
-                                <p class="font-bold text-slate-800">INV: ${s.invoiceNo || 'N/A'} <span class="text-xs font-bold uppercase ${typeColor}">[${s.type || ''}]</span></p>
-                                <p class="text-xs text-gray-500">${new Date(s.date).toLocaleString()}</p>
-                                <p class="text-sm font-bold text-blue-700">LKR ${s.total.toFixed(2)} <span class="text-xs font-normal ${profitColor}">ලාභය: ${(s.profit||0).toFixed(2)}</span></p>
-                            </div>
-                            <span class="text-[10px] font-bold px-2 py-1 rounded shrink-0 ${statusColor}">${s.status}</span>
-                        </div>
+                <div class="p-3 border rounded bg-white shadow-sm flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="font-bold">INV: ${s.invoiceNo || 'N/A'} <span class="text-xs font-bold uppercase ${typeColor}">[${s.type || ''}]</span></p>
+                        <p class="text-xs text-gray-500">${new Date(s.date).toLocaleString()}</p>
+                        <p class="text-sm font-bold text-slate-800">LKR ${s.total.toFixed(2)}</p>
                     </div>
-                    <div class="grid grid-cols-3 border-t divide-x text-center">
-                        <button onclick="viewBillFromHistory(${s.id})" class="py-2 text-[11px] font-bold text-blue-700 active:bg-blue-50">👁 VIEW</button>
-                        <button onclick="editSale(${s.id})" class="py-2 text-[11px] font-bold text-orange-600 active:bg-orange-50">✏️ EDIT</button>
-                        <button onclick="reprintSaleById(${s.id})" class="py-2 text-[11px] font-bold text-slate-700 active:bg-slate-50">🖨️ PRINT</button>
+                    <div class="text-right flex flex-col gap-1 ml-2">
+                        <span class="text-[10px] font-bold px-2 py-1 rounded block ${statusColor}">${s.status}</span>
+                        ${canRestore ? `<button onclick='editSale(${s.id})' class="bg-blue-600 text-white px-3 py-1 rounded text-[10px] font-bold">EDIT</button>` : ''}
                     </div>
                 </div>`;
             }).join('');
-        }
-
-        let currentBillDetailSale = null;
-
-        async function viewBillFromHistory(id) {
-            const sale = await db.sales.get(id);
-            if (!sale) return;
-            currentBillDetailSale = sale;
-            showBillDetail(sale);
-        }
-
-        async function reprintSaleById(id) {
-            const sale = await db.sales.get(id);
-            if (!sale) return;
-            generateBillPopup(sale);
-        }
-
-        function reprintSale(sale) {
-            if (!sale) return;
-            document.getElementById('bill-detail-modal').classList.add('hidden');
-            generateBillPopup(sale);
-        }
-
-        async function editSaleFromModal(sale) {
-            if (!sale) return;
-            document.getElementById('bill-detail-modal').classList.add('hidden');
-            await editSale(sale.id);
         }
 
         async function editSale(id) {
@@ -1293,40 +1277,7 @@
             setPaymentMode(sale.type || 'cash');
             await db.sales.delete(id);
             renderCart(); updateLivePreview(); showTab('billing');
-        }
-
-        async function saveBillToHistory() {
-            if(cart.length === 0) return alert("Cart is empty");
-
-            const subtotal = cart.reduce((sum, i) => {
-                const cp = i.creditPrice || i.cashPrice || i.price;
-                return sum + (paymentMode === 'credit' ? (cp * i.qty) : i.total);
-            }, 0);
-
-            const profit = paymentMode === 'credit'
-                ? cart.reduce((sum, i) => sum + Math.max(0, ((i.cashPrice||i.price||0) - (i.creditPrice||i.cashPrice||i.price||0)) * i.qty), 0)
-                : cart.reduce((sum, i) => sum + (i.discount || 0), 0);
-
-            const lastSale = await db.sales.orderBy('id').last();
-            const nextId = lastSale ? (lastSale.id + 1) : 1;
-            const invoiceNo = nextId.toString().padStart(5, '0');
-
-            for(let i of cart) {
-                if(i.code && i.code !== 'unlisted') {
-                    const invItem = await db.inventory.get(i.code);
-                    if(invItem) await db.inventory.update(i.code, {stock: invItem.stock - i.qty});
-                }
-            }
-
-            await db.sales.add({
-                date: new Date().getTime(), total: subtotal, profit,
-                customer: 'General Customer', type: paymentMode, invoiceNo,
-                status: 'Saved', gavePrice: subtotal, balance: 0,
-                items: JSON.parse(JSON.stringify(cart))
-            });
-
-            clearCart();
-            alert("Bill saved to History!");
+            alert("Items restored to Billing. Original History record deleted.");
         }
 
         // ============ BARCODE SCANNER ============
@@ -1441,7 +1392,6 @@
             // Status buckets
             const printed = billSales.filter(s => s.status === 'Printed').length;
             const closed = billSales.filter(s => s.status === 'Closed').length;
-            const saved = billSales.filter(s => s.status === 'Saved').length;
             const inProgress = billSales.filter(s => s.status === 'In Progress').length;
 
             // Destroy old charts
@@ -1482,8 +1432,8 @@
             chartBillStatus = new Chart(document.getElementById('chart-bill-status'), {
                 type: 'doughnut',
                 data: {
-                    labels: ['Printed', 'Closed', 'Saved', 'In Progress'],
-                    datasets: [{ data: [printed, closed, saved, inProgress], backgroundColor: ['rgba(34,197,94,0.8)', 'rgba(59,130,246,0.8)', 'rgba(139,92,246,0.8)', 'rgba(251,191,36,0.8)'], borderWidth: 2 }]
+                    labels: ['Printed', 'Closed', 'In Progress'],
+                    datasets: [{ data: [printed, closed, inProgress], backgroundColor: ['rgba(34,197,94,0.8)', 'rgba(59,130,246,0.8)', 'rgba(251,191,36,0.8)'], borderWidth: 2 }]
                 },
                 options: { ...chartDefaults, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
             });
